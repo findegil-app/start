@@ -7,17 +7,18 @@ import { dismissToast, toasts } from '../stores/toast'
     <div v-for="t in toasts" :key="t.id" class="toast">
       <span>{{ t.message }}</span>
       <button
-        v-if="t.action"
+        v-for="a in t.actions"
+        :key="a.label"
         type="button"
         class="toast-action"
         @click="
           () => {
-            t.action!.run()
+            a.run()
             dismissToast(t.id)
           }
         "
       >
-        {{ t.action.label }}
+        {{ a.label }}
       </button>
       <button type="button" class="toast-close" aria-label="Dismiss" @click="dismissToast(t.id)">✕</button>
     </div>

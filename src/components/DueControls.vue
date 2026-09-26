@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Note } from '../db'
 import { dueTone, formatDate, hasTime, REMINDER_PRESETS, reminderPreset, remindFor, toLocalDateTime } from '../lib/dates'
+import { requestNotificationPermission } from '../notifications/reminders'
 import { updateNote } from '../stores/notes'
 
 const props = defineProps<{ note: Note }>()
@@ -30,6 +31,7 @@ function onPreset(e: Event) {
     remind = toLocalDateTime(d)
   }
   void updateNote(props.note.id, { remind })
+  if (remind) void requestNotificationPermission()
 }
 </script>
 

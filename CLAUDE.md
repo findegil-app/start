@@ -6,3 +6,4 @@
 - Antes de fusionar: `npm test` y `npm run build` deben pasar.
 - El token de GitHub de las notas nunca se escribe en el repo: llega como secreto de Actions (`NOTES_TOKEN`, `NOTES_GOOGLE_SUB`) y se cifra en build (`src/lib/vault.ts`, `vite.config.ts`).
 - Repo de notas: `pablolloce/red-notes` (privado), asociado a `pablo.llorente@nfq.es` en `src/config/users.ts`.
+- App Android: Capacitor (`android/`), workflow `.github/workflows/android.yml` → release `apk`. El build del APK usa `BASE_PATH=/`. Tras cambiar dependencias nativas, `npx cap sync android`.

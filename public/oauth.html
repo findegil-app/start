@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Findegil · Signing in…</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0f1220; color: #ece5d4; font-family: system-ui, sans-serif; text-align: center; }
+      a { display: inline-block; margin-top: 1rem; background: #e3c27a; color: #14182b; padding: 0.8rem 1.4rem; border-radius: 12px; font-weight: 700; text-decoration: none; }
+      p { color: #9a9eb3; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 style="font-weight: 400">Findegil</h1>
+      <p id="msg">Returning to the app…</p>
+      <a id="back" href="#" hidden>Open Findegil</a>
+    </main>
+    <script>
+      // Vuelta del login de Google para la app Android: reenvía el id_token a findegil://auth.
+      var data = new URLSearchParams(location.hash.slice(1))
+      var q = new URLSearchParams()
+      if (data.get('id_token')) q.set('id_token', data.get('id_token'))
+      if (data.get('error')) q.set('error', data.get('error'))
+      var intent = 'intent://auth?' + q.toString() + '#Intent;scheme=findegil;package=app.findegil;end'
+      var direct = 'findegil://auth?' + q.toString()
+      var link = document.getElementById('back')
+      link.href = /Android/i.test(navigator.userAgent) ? intent : direct
+      link.hidden = false
+      location.replace(link.href)
+      setTimeout(function () { document.getElementById('msg').textContent = 'Tap the button to go back to Findegil.' }, 1500)
+    </script>
+  </body>
+</html>

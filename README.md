@@ -62,6 +62,20 @@ assets/<uuid>.webp                     # imágenes (referenciadas como /assets/�
 | Incrustado | `@[embed](https://…)` |
 | Fórmula | `$x^2$` y bloque `$$ … $$` |
 
+### Móvil, agenda y avisos
+
+- **Móvil**: pestañas Capture · Landing · Agenda · Library. Capture es la pantalla de inicio (título opcional, due, aviso, checklist, Scratch, Move to…). En las listas, deslizar → abre *Move to…*, ← borra (con Undo).
+- **Calendar / Agenda**: vista mensual (PC) y agenda (vencidas, hoy, mañana, próximos días) con notas con fecha y entregas de proyectos.
+- **Avisos**: en la web, aviso dentro de la app (Open · Snooze 10 min · Done) y notificación del navegador si la pestaña está en segundo plano. En Android, notificaciones nativas programadas aunque la app esté cerrada.
+
+## App Android (APK)
+
+- Capacitor (`capacitor.config.ts`, proyecto en `android/`). El workflow **Build Android APK** compila en cada push a `main` y publica la release fija **apk**:
+  `https://github.com/findegil-app/start/releases/download/apk/Findegil.apk`
+- Login de Google en el APK: se abre el navegador del sistema y Google vuelve a `https://findegil-app.github.io/start/oauth.html`, que reenvía a `findegil://auth`. Esa URL debe estar en **URIs de redireccionamiento autorizados** del cliente OAuth.
+- Firma: si existen los secretos `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` se usan; si no, una clave debug guardada en la caché de Actions (si la caché caduca, habría que desinstalar y reinstalar).
+- Recursos: `node scripts/android-assets.mjs` regenera iconos, splash e icono de notificación desde `brand/`.
+
 ## Autenticación
 
 1. **Google Sign-In** (Google Identity Services, mismo cliente OAuth que `rdr-nfq/team-hub`). Solo entran los correos de `src/config/users.ts`, y cada correo tiene asociado su repositorio de notas (el repo no se muestra ni se elige en la UI).

@@ -4,7 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import ContainerDialog from '../components/ContainerDialog.vue'
 import MovePalette from '../components/MovePalette.vue'
 import Sidebar from '../components/Sidebar.vue'
+import TabBar from '../components/TabBar.vue'
 import Toasts from '../components/Toasts.vue'
+import { startReminders } from '../notifications/reminders'
 import { installNoteLinkHost } from '../stores/noteLinks'
 import { createNote } from '../stores/notes'
 
@@ -29,8 +31,15 @@ function onKey(e: KeyboardEvent) {
     void capture()
   }
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+let stopReminders = () => {}
+onMounted(() => {
+  window.addEventListener('keydown', onKey)
+  stopReminders = startReminders(router)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKey)
+  stopReminders()
+})
 watch(() => route.fullPath, () => (drawer.value = false))
 </script>
 
@@ -44,5 +53,6 @@ watch(() => route.fullPath, () => (drawer.value = false))
     <MovePalette />
     <ContainerDialog />
     <Toasts />
+    <TabBar />
   </div>
 </template>

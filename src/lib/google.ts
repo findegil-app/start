@@ -27,6 +27,7 @@ export interface GoogleIdClaims {
   aud: string
   iss: string
   exp: number
+  nonce?: string
 }
 
 let loading: Promise<GoogleId> | null = null

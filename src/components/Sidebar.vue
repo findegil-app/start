@@ -8,6 +8,8 @@ import { session, signOut } from '../stores/auth'
 import { openContainerDialog, useContainers } from '../stores/containers'
 import { moveNote, useCounts, type Location } from '../stores/notes'
 import { cycleTheme, THEME_LABEL, themeMode } from '../stores/theme'
+import { useAgenda } from '../stores/agenda'
+import { toLocalDate } from '../lib/dates'
 import SyncIndicator from './SyncIndicator.vue'
 
 const emit = defineEmits<{ capture: []; navigate: [] }>()
@@ -15,6 +17,8 @@ const route = useRoute()
 const router = useRouter()
 const containers = useContainers()
 const counts = useCounts()
+const agenda = useAgenda()
+const dueToday = computed(() => (agenda.value ?? []).filter((i) => !i.done && i.due.slice(0, 10) <= toLocalDate(new Date())).length)
 const logo = `${import.meta.env.BASE_URL}logo.svg`
 
 const sections: { kind: ContainerKind; icon: string }[] = [
@@ -71,6 +75,9 @@ async function logout() {
       <RouterLink :to="{ name: 'inbox' }" class="nav-item" v-bind="dropProps({ bucket: 'inbox' })">
         <span class="ico">⬇</span>Landing Zone
         <span v-if="counts?.inbox" class="badge">{{ counts.inbox }}</span>
+      </RouterLink>
+      <RouterLink :to="{ name: 'agenda' }" class="nav-item">
+        <span class="ico">▦</span>Calendar<span v-if="dueToday" class="count">{{ dueToday }} today</span>
       </RouterLink>
       <RouterLink :to="{ name: 'scratch' }" class="nav-item" v-bind="dropProps({ bucket: 'scratch' })">
         <span class="ico">✎</span>Scratch<span v-if="counts?.scratch" class="count">{{ counts.scratch }}</span>

@@ -1,0 +1,87 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm ci
+      - run: npm test
+
+      # La app nativa sirve la web desde la raíz (https://localhost/).
+      - run: npm run build
+        env:
+          BASE_PATH: /
+          NOTES_TOKEN: ${{ secrets.NOTES_TOKEN }}
+          NOTES_GOOGLE_SUB: ${{ secrets.NOTES_GOOGLE_SUB }}
+      - run: npx cap sync android
+
+      # Firma estable: con los secretos ANDROID_KEYSTORE_* si existen; si no, una clave debug
+      # guardada en la caché de Actions para que las actualizaciones se instalen sobre la versión anterior.
+      - name: Keystore
+        id: keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "file=$RUNNER_TEMP/release.jks" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Debug keystore cache
+        if: steps.keystore.outputs.file == ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: findegil-debug-keystore-v1
+
+      - name: Gradle assembleRelease
+        working-directory: android
+        env:
+          APK_VERSION_CODE: ${{ github.run_number }}
+          APK_VERSION_NAME: 1.0.${{ github.run_number }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.file }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/Findegil.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Findegil-apk
+          path: Findegil.apk
+
+      # Release fija "apk": el enlace de descarga no cambia entre versiones.
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete apk --yes --cleanup-tag || true
+          gh release create apk Findegil.apk \
+            --title "Findegil for Android (1.0.${{ github.run_number }})" \
+            --notes "Latest Android build from ${GITHUB_SHA::7}. Download Findegil.apk on your phone and open it to install or update." \
+            --latest

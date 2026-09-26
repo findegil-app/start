@@ -2,6 +2,8 @@
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { renderGoogleButton } from '../lib/google'
+import { nativeGoogleSignIn } from '../lib/nativeAuth'
+import { isNative } from '../lib/platform'
 import { credentials, session, signInWithGoogle, signOut, unlockRepo, UnlockError, type UnlockErrorCode } from '../stores/auth'
 
 const router = useRouter()
@@ -13,7 +15,7 @@ const busy = ref(false)
 const copied = ref(false)
 
 async function goHome() {
-  if (session.value && credentials.value) await router.replace({ name: 'inbox' })
+  if (session.value && credentials.value) await router.replace('/')
 }
 
 async function run(action: () => Promise<void>) {
@@ -32,7 +34,7 @@ async function run(action: () => Promise<void>) {
 }
 
 async function mountGoogle() {
-  if (session.value || !googleBtn.value) return
+  if (session.value || !googleBtn.value || isNative) return
   try {
     await renderGoogleButton(googleBtn.value, (idToken) => run(() => signInWithGoogle(idToken)))
   } catch (err) {
@@ -70,7 +72,10 @@ watch(session, (s) => !s && setTimeout(mountGoogle))
 
       <template v-if="!session">
         <p class="muted">Sign in with your Google account.</p>
-        <div ref="googleBtn" class="google-btn" />
+        <button v-if="isNative" type="button" class="primary google-native" :disabled="busy" @click="run(async () => signInWithGoogle(await nativeGoogleSignIn()))">
+          Sign in with Google
+        </button>
+        <div v-else ref="googleBtn" class="google-btn" />
       </template>
 
       <div v-else class="token-step">

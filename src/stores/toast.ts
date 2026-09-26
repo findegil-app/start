@@ -1,16 +1,21 @@
 import { reactive } from 'vue'
 
+export interface ToastAction {
+  label: string
+  run: () => void
+}
+
 export interface Toast {
   id: number
   message: string
-  action?: { label: string; run: () => void }
+  actions: ToastAction[]
 }
 
 export const toasts = reactive<Toast[]>([])
 let seq = 0
 
-export function showToast(message: string, action?: Toast['action'], ms = 6000) {
-  const toast: Toast = { id: ++seq, message, action }
+export function showToast(message: string, action?: ToastAction | ToastAction[], ms = 6000) {
+  const toast: Toast = { id: ++seq, message, actions: action ? (Array.isArray(action) ? action : [action]) : [] }
   toasts.push(toast)
   setTimeout(() => dismissToast(toast.id), ms)
   return toast.id

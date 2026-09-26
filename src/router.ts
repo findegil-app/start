@@ -11,7 +11,11 @@ export const router = createRouter({
       path: '/',
       component: () => import('./views/LibraryView.vue'),
       children: [
-        { path: '', redirect: { name: 'inbox' } },
+        // En móvil la app arranca en Capture; en PC, en la Landing Zone.
+        { path: '', redirect: () => ({ name: window.matchMedia('(max-width: 760px)').matches ? 'capture' : 'inbox' }) },
+        { path: 'capture', name: 'capture', component: () => import('./views/CaptureView.vue') },
+        { path: 'agenda', name: 'agenda', component: () => import('./views/AgendaView.vue') },
+        { path: 'library', name: 'library', component: () => import('./views/LibraryHome.vue') },
         { path: 'inbox', name: 'inbox', component: () => import('./views/SectionView.vue') },
         { path: 'scratch', name: 'scratch', component: () => import('./views/SectionView.vue') },
         { path: 'c/:cid', name: 'container', component: () => import('./views/SectionView.vue') },
