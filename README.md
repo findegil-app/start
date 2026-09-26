@@ -43,6 +43,13 @@ assets/<uuid>.webp                     # imágenes (referenciadas como /assets/�
 - La carpeta manda: mover un archivo en GitHub a otra carpeta PARA cambia su ubicación en la app; una carpeta de proyecto/área/recurso sin `_meta` se adopta como contenedor nuevo.
 - Las notas de la estructura antigua (`notes/`) se migran solas a la Landing Zone.
 
+### Editor (tipo Notion)
+
+- **/** abre el menú de bloques: texto, títulos, to-do, listas, toggle, cita, callouts (note/tip/warning/important), código con resaltado, tabla, divisor, imagen y fecha.
+- Seleccionar texto muestra el menú flotante (Turn into, negrita, cursiva, tachado, código, resaltado, enlace); dentro de una tabla, acciones de filas/columnas.
+- Tirador de bloque (＋ inserta debajo, ⋮⋮ arrastra para reordenar).
+- Todo se guarda como Markdown legible en GitHub: callouts = alertas `> [!TIP]`, toggles = `<details>`, tablas GFM, resaltado `==texto==`.
+
 ## Autenticación
 
 1. **Google Sign-In** (Google Identity Services, mismo cliente OAuth que `rdr-nfq/team-hub`). Solo entran los correos de `src/config/users.ts`, y cada correo tiene asociado su repositorio de notas (el repo no se muestra ni se elige en la UI).

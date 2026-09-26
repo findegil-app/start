@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { Markdown } from '@tiptap/markdown'
-import Placeholder from '@tiptap/extension-placeholder'
-import TaskItem from '@tiptap/extension-task-item'
-import TaskList from '@tiptap/extension-task-list'
-import StarterKit from '@tiptap/starter-kit'
+import { DragHandle } from '@tiptap/extension-drag-handle-vue-3'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { addImage, updateNote } from '../stores/notes'
-import { AssetImage } from './AssetImage'
+import { PICK_IMAGE_EVENT } from './blocks'
+import BubbleToolbar from './BubbleToolbar.vue'
 import EditorToolbar from './EditorToolbar.vue'
+import { contentExtensions } from './extensions'
+import { SlashCommand } from './extensions/SlashCommand'
 
 const props = defineProps<{ noteId: string; content: string }>()
 
@@ -58,14 +58,7 @@ const imageFiles = (list?: FileList | null) => Array.from(list ?? []).filter((f)
 const editor = useEditor({
   content: props.content,
   contentType: 'markdown',
-  extensions: [
-    StarterKit.configure({ underline: false, link: { openOnClick: false, autolink: true } }),
-    Markdown,
-    AssetImage,
-    TaskList,
-    TaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: 'Write something…' }),
-  ],
+  extensions: [...contentExtensions(), SlashCommand],
   editorProps: {
     attributes: { class: 'prose', spellcheck: 'true' },
     handlePaste(_view, event) {
@@ -96,10 +89,39 @@ watch(
   },
 )
 
-const flushOnHide = () => document.visibilityState === 'hidden' && flush()
-document.addEventListener('visibilitychange', flushOnHide)
-window.addEventListener('pagehide', flush)
+// Selector de imágenes para el bloque "Image" del menú "/".
+const fileInput = ref<HTMLInputElement>()
+const root = ref<HTMLElement>()
+const pickImage = () => fileInput.value?.click()
+function onFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = imageFiles(input.files)
+  input.value = ''
+  if (files.length) void insertImages(files)
+}
 
+// Tirador de bloques: "+" inserta un bloque debajo y abre el menú "/".
+let hovered: PMNode | null = null
+function onNodeChange({ node }: { node: PMNode | null }) {
+  hovered = node
+}
+function addBlockBelow() {
+  const ed = editor.value
+  if (!ed || !hovered) return
+  let at: number | null = null
+  ed.state.doc.forEach((child, offset) => {
+    if (child === hovered) at = offset + child.nodeSize
+  })
+  if (at === null) return
+  ed.chain().insertContentAt(at, { type: 'paragraph' }).focus(at + 1).insertContent('/').run()
+}
+
+const flushOnHide = () => document.visibilityState === 'hidden' && flush()
+onMounted(() => {
+  document.addEventListener('visibilitychange', flushOnHide)
+  window.addEventListener('pagehide', flush)
+  root.value?.addEventListener(PICK_IMAGE_EVENT, pickImage)
+})
 onBeforeUnmount(() => {
   flush()
   document.removeEventListener('visibilitychange', flushOnHide)
@@ -110,8 +132,17 @@ defineExpose({ focus: () => editor.value?.commands.focus('start') })
 </script>
 
 <template>
-  <div class="note-editor">
+  <div ref="root" class="note-editor">
     <EditorToolbar v-if="editor" :editor="editor" :busy="imageBusy > 0" @images="insertImages" />
+    <template v-if="editor">
+      <DragHandle :editor="editor" class="drag-handle" :on-node-change="onNodeChange">
+        <button type="button" class="handle-btn" title="Add block below" @mousedown.prevent @click="addBlockBelow">＋</button>
+        <span class="handle-grip" title="Drag to move">⋮⋮</span>
+      </DragHandle>
+      <BubbleToolbar :editor="editor" />
+    </template>
     <EditorContent :editor="editor" class="editor-content" />
+    <p v-if="imageBusy" class="muted small">Processing image…</p>
+    <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="onFiles" />
   </div>
 </template>

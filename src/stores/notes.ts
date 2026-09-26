@@ -37,8 +37,12 @@ export type NoteSummary = Pick<Note, 'id' | 'title' | 'tags' | 'updatedAt' | 'sy
 function excerpt(content: string): string {
   return content
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/^\s*>\s*\[![A-Z]+\]\s*$/gim, '')
+    .replace(/<\/?(details|summary)>/g, ' ')
+    .replace(/^\s*\|?\s*:?-{3,}.*$/gm, '')
     .replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, '')
-    .replace(/[#>*_`~\-[\]()]/g, '')
+    .replace(/```[\w-]*/g, '')
+    .replace(/[#>*_`~\-[\]()|=]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 140)
@@ -167,6 +171,9 @@ export function moveNote(id: string, to: Location) {
   return updateNote(id, { bucket: to.bucket as Bucket, containerId: to.bucket === 'container' ? to.containerId : null }, 2000)
 }
 
+/** Margen para deshacer un borrado antes de que el worker lo suba a GitHub. */
+export const UNDO_WINDOW_MS = 8000
+
 export async function deleteNote(id: string) {
   await db.transaction('rw', db.notes, async () => {
     const note = await db.notes.get(id)
@@ -174,7 +181,16 @@ export async function deleteNote(id: string) {
     // Tombstone: el worker borra el archivo remoto y luego la fila.
     await db.notes.update(id, { syncStatus: 'deleted', rev: note.rev + 1, updatedAt: new Date().toISOString() })
   })
-  requestSync()
+  requestSync(UNDO_WINDOW_MS + 2000)
+}
+
+/** Deshace un borrado mientras el tombstone siga en local (se re-sube tal cual, sin cambios reales). */
+export async function restoreNote(id: string) {
+  await db.transaction('rw', db.notes, async () => {
+    const note = await db.notes.get(id)
+    if (note?.syncStatus === 'deleted') await db.notes.update(id, { syncStatus: 'pending', rev: note.rev + 1 })
+  })
+  requestSync(EDIT_DEBOUNCE_MS)
 }
 
 /** Comprime la imagen a WebP, la guarda en IndexedDB y devuelve la referencia Markdown. */

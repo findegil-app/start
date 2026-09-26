@@ -4,7 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import NoteEditor from '../editor/NoteEditor.vue'
 import { KIND_PLURAL } from '../lib/para'
 import { openMove, useContainers } from '../stores/containers'
-import { deleteNote, updateNote, useNote } from '../stores/notes'
+import { deleteWithUndo } from '../composables/useDeleteNote'
+import { updateNote, useNote } from '../stores/notes'
 import DueControls from './DueControls.vue'
 import TagInput from './TagInput.vue'
 
@@ -75,8 +76,8 @@ function onTags(next: string[]) {
 }
 
 async function remove() {
-  if (!note.value || !confirm('Delete this note? It will also be removed from the repository.')) return
-  await deleteNote(note.value.id)
+  if (!note.value) return
+  await deleteWithUndo(note.value.id)
   emit('close')
 }
 
@@ -90,7 +91,7 @@ onBeforeUnmount(flushTitle)
       <RouterLink v-if="crumb" :to="crumb.to" class="crumb">{{ crumb.label }}</RouterLink>
       <span class="spacer" />
       <button type="button" class="ghost small" title="Move to… (M)" @click="openMove(note.id)">↗ Move</button>
-      <button type="button" class="icon-btn danger" title="Delete note" aria-label="Delete note" @click="remove">🗑</button>
+      <button type="button" class="icon-btn danger" title="Delete note (Del)" aria-label="Delete note" @click="remove">🗑</button>
     </div>
     <textarea
       ref="titleInput"

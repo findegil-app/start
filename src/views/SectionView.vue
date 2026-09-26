@@ -15,6 +15,7 @@ import {
   updateContainer,
   useContainer,
 } from '../stores/containers'
+import { deleteWithUndo } from '../composables/useDeleteNote'
 import { createNote, useLiveQuery, useNotesIn, type Location } from '../stores/notes'
 
 const emit = defineEmits<{ menu: [] }>()
@@ -111,12 +112,24 @@ function setDeadline(e: Event) {
   if (c) void updateContainer(c.id, { deadline: (e.target as HTMLInputElement).value || null })
 }
 
+/** Borra y, si era la nota abierta, pasa a la siguiente de la lista. */
+async function removeNote(id: string) {
+  const list = notes.value ?? []
+  const i = list.findIndex((n) => n.id === id)
+  const next = list[i + 1] ?? list[i - 1]
+  await deleteWithUndo(id)
+  if (openId.value === id) open(next && next.id !== id ? next.id : null)
+}
+
 function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement
   if (e.ctrlKey || e.metaKey || e.altKey || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
   const list = notes.value ?? []
   const i = list.findIndex((n) => n.id === openId.value)
-  if (e.key === 'm' && openId.value) {
+  if ((e.key === 'Delete' || e.key === 'Backspace') && openId.value) {
+    e.preventDefault()
+    void removeNote(openId.value)
+  } else if (e.key === 'm' && openId.value) {
     e.preventDefault()
     openMove(openId.value)
   } else if (e.key === 'j' || e.key === 'ArrowDown') {
@@ -171,6 +184,7 @@ function onKey(e: KeyboardEvent) {
           :show-move="route.name === 'inbox'"
           @open="open(n.id)"
           @move="openMove(n.id)"
+          @delete="removeNote(n.id)"
         />
         <p v-if="notes && !notes.length" class="empty muted">
           {{ search ? 'No results.' : route.name === 'inbox' ? 'Landing Zone is empty. Nice.' : 'No notes here yet.' }}

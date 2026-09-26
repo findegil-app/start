@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import ContainerDialog from '../components/ContainerDialog.vue'
 import MovePalette from '../components/MovePalette.vue'
 import Sidebar from '../components/Sidebar.vue'
+import Toasts from '../components/Toasts.vue'
 import { createNote } from '../stores/notes'
 
 const route = useRoute()
@@ -40,5 +41,6 @@ watch(() => route.fullPath, () => (drawer.value = false))
     </RouterView>
     <MovePalette />
     <ContainerDialog />
+    <Toasts />
   </div>
 </template>

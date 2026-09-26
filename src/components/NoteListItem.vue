@@ -4,7 +4,7 @@ import { dueTone, formatDate } from '../lib/dates'
 import type { NoteSummary } from '../stores/notes'
 
 const props = defineProps<{ note: NoteSummary; active: boolean; showMove?: boolean; location?: string }>()
-const emit = defineEmits<{ open: []; move: [] }>()
+const emit = defineEmits<{ open: []; move: []; delete: [] }>()
 
 const tone = computed(() => (props.note.due ? dueTone(props.note.due, props.note.done) : null))
 
@@ -47,6 +47,9 @@ function onDragStart(e: DragEvent) {
         <span v-for="t in note.tags.slice(0, 3)" :key="t" class="tag small">#{{ t }}</span>
       </div>
     </div>
-    <button v-if="showMove" type="button" class="ghost small move-btn" title="Move to… (M)" @click.stop="emit('move')">Move to…</button>
+    <div class="row-actions">
+      <button v-if="showMove" type="button" class="ghost small" title="Move to… (M)" @click.stop="emit('move')">Move to…</button>
+      <button type="button" class="icon-btn danger" title="Delete (Del)" aria-label="Delete note" @click.stop="emit('delete')">🗑</button>
+    </div>
   </div>
 </template>
