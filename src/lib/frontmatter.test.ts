@@ -21,17 +21,30 @@ describe('frontmatter', () => {
 
   it('round-trip preserva campos y claves desconocidas', () => {
     const withExtra = { ...note, extra: { pinned: true, source: 'web' } }
-    expect(parseNote(note.id, serializeNote(withExtra))).toEqual(withExtra)
+    expect(parseNote(serializeNote(withExtra), 'notes/x.md')).toEqual({ ...withExtra, hasId: true })
   })
 
   it('tolera archivos sin frontmatter (creados a mano en el repo)', () => {
-    const parsed = parseNote('abc', '# Mi idea\n\nalgo')
+    const parsed = parseNote('# Mi idea\n\nalgo', 'notes/Idea suelta.md')
+    expect(parsed.hasId).toBe(false)
+    expect(parsed.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(parsed.title).toBe('Mi idea')
+    expect(parseNote('solo texto', 'notes/Idea suelta.md').title).toBe('Idea suelta')
     expect(parsed.content).toBe('# Mi idea\n\nalgo')
     expect(parsed.tags).toEqual([])
   })
 
   it('acepta tags como string separado por comas', () => {
-    expect(parseNote('x', '---\ntags: a, b ,a\n---\nhola').tags).toEqual(['a', 'b'])
+    expect(parseNote('---\ntags: a, b ,a\n---\nhola', 'notes/x.md').tags).toEqual(['a', 'b'])
+  })
+})
+
+describe('rutas por título', () => {
+  it('limpia caracteres no válidos y resuelve colisiones', async () => {
+    const { fileNameFromTitle, notePathForTitle } = await import('./paths')
+    expect(fileNameFromTitle('  Reunión: Q3/Q4 ¿plan?  ')).toBe('Reunión Q3 Q4 ¿plan')
+    expect(fileNameFromTitle('   ')).toBe('Sin título')
+    const taken = new Set(['notes/idea.md', 'notes/idea (2).md'])
+    expect(notePathForTitle('Idea', (p) => taken.has(p))).toBe('notes/Idea (3).md')
   })
 })

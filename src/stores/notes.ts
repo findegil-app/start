@@ -82,6 +82,7 @@ export async function createNote(): Promise<string> {
     createdAt: now,
     updatedAt: now,
     syncStatus: 'pending',
+    remotePath: null,
     remoteSha: null,
     rev: 1,
   }

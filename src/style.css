@@ -93,11 +93,15 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
 .login-card h1 { margin: 0; text-align: center; }
 .login-card > p { margin: 0; text-align: center; }
 .login-logo { align-self: center; border-radius: 14px; }
-.login-card label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; font-weight: 600; }
+.login-card label, .token-step label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; font-weight: 600; }
 .login-card .help { font-size: 0.875rem; color: var(--muted); }
 .login-card .help summary { cursor: pointer; }
 .login-card .help ol { padding-left: 1.2rem; }
-.error { color: var(--danger); margin: 0; font-size: 0.9rem; }
+.error { color: var(--danger); margin: 0; font-size: 0.9rem; text-align: center; }
+.google-btn { display: flex; justify-content: center; min-height: 44px; }
+.token-step { display: flex; flex-direction: column; gap: 1rem; }
+.token-step > p { margin: 0; text-align: center; }
+.link-btn { border: 0; background: none; color: var(--muted); text-decoration: underline; font-size: 0.85rem; }
 
 /* ---------- Layout ---------- */
 .shell { display: grid; grid-template-columns: var(--sidebar) 1fr; height: 100%; }
@@ -148,7 +152,8 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
   padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom));
   font-size: 0.8rem;
 }
-.repo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account { display: inline-flex; align-items: center; gap: 0.35rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account img { border-radius: 50%; }
 
 .content { min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); }
 .placeholder { height: 100%; display: grid; place-content: center; text-align: center; padding: 2rem; }

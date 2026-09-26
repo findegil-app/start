@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SyncIndicator from '../components/SyncIndicator.vue'
-import { credentials, logout } from '../stores/auth'
+import { session, signOut as authSignOut } from '../stores/auth'
 import { createNote, useNoteList } from '../stores/notes'
 
 const route = useRoute()
@@ -26,8 +26,8 @@ function formatDate(iso: string) {
 }
 
 async function signOut() {
-  if (!confirm('¿Cerrar sesión? Se borrará el token de este dispositivo. Las notas locales se conservan.')) return
-  await logout()
+  if (!confirm('¿Cerrar sesión en este dispositivo?')) return
+  await authSignOut()
   await router.replace({ name: 'login' })
 }
 </script>
@@ -70,8 +70,9 @@ async function signOut() {
       </nav>
       <footer class="sidebar-footer">
         <SyncIndicator />
-        <span class="muted repo" :title="credentials ? `${credentials.owner}/${credentials.repo}` : ''">
-          {{ credentials?.owner }}/{{ credentials?.repo }}
+        <span class="account muted" :title="session?.email">
+          <img v-if="session?.picture" :src="session.picture" alt="" width="20" height="20" referrerpolicy="no-referrer" />
+          {{ session?.name ?? session?.email }}
         </span>
       </footer>
     </aside>

@@ -1,5 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-import { credentials } from './stores/auth'
+import { credentials, session } from './stores/auth'
 
 // Hash history: GitHub Pages no tiene fallback SPA y así cualquier URL funciona offline.
 export const router = createRouter({
@@ -18,7 +18,9 @@ export const router = createRouter({
   ],
 })
 
+// Para entrar hacen falta identidad (Google) y acceso al repo (token de GitHub en el dispositivo).
 router.beforeEach((to) => {
-  if (!credentials.value && to.name !== 'login') return { name: 'login' }
-  if (credentials.value && to.name === 'login') return { name: 'home' }
+  const ready = !!session.value && !!credentials.value
+  if (!ready && to.name !== 'login') return { name: 'login' }
+  if (ready && to.name === 'login') return { name: 'home' }
 })

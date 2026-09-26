@@ -71,11 +71,16 @@ function makeNote(over: Partial<Note> = {}): Note {
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
     syncStatus: 'pending',
+    remotePath: null,
     remoteSha: null,
     rev: 1,
     ...over,
   }
 }
+
+const text = (path: string) => base64ToUtf8(gh.files.get(path)!.b64)
+const edit = (id: string, patch: Partial<Note>) =>
+  db.notes.where('id').equals(id).modify((x) => Object.assign(x, patch, { syncStatus: 'pending', rev: x.rev + 1 }))
 
 beforeEach(() => {
   db = createDb(`test-${Math.random()}`)
@@ -84,40 +89,71 @@ beforeEach(() => {
 })
 
 describe('SyncEngine push', () => {
-  it('crea notas nuevas como notes/<id>.md con frontmatter', async () => {
-    const note = makeNote()
+  it('crea notes/<Título>.md con el id en el frontmatter', async () => {
+    const note = makeNote({ title: 'Reunión de proyecto' })
     await db.notes.add(note)
     const report = await engine.run()
 
     expect(report.pushed).toBe(1)
-    const file = gh.files.get(`notes/${note.id}.md`)!
-    expect(base64ToUtf8(file.b64)).toBe(serializeNote(note))
-    expect(gh.commits).toEqual([`create: ${note.id}`])
-    const stored = await db.notes.get(note.id)
-    expect(stored).toMatchObject({ syncStatus: 'synced', remoteSha: file.sha })
+    expect(text('notes/Reunión de proyecto.md')).toBe(serializeNote(note))
+    expect(gh.commits).toEqual(['create: Reunión de proyecto'])
+    expect(await db.notes.get(note.id)).toMatchObject({
+      syncStatus: 'synced',
+      remotePath: 'notes/Reunión de proyecto.md',
+      remoteSha: gh.files.get('notes/Reunión de proyecto.md')!.sha,
+    })
+  })
+
+  it('resuelve títulos repetidos con sufijo (n) y no los renombra después', async () => {
+    const a = makeNote({ title: 'Idea' })
+    const b = makeNote({ title: 'idea' })
+    await db.notes.bulkAdd([a, b])
+    await engine.run()
+    expect([...gh.files.keys()].sort()).toEqual(['notes/Idea.md', 'notes/idea (2).md'])
+
+    await edit(b.id, { content: 'otro cuerpo' })
+    await engine.run()
+    expect(gh.commits.at(-1)).toBe('update: idea')
+    expect([...gh.files.keys()].sort()).toEqual(['notes/Idea.md', 'notes/idea (2).md'])
+  })
+
+  it('al cambiar el título mueve el archivo', async () => {
+    const note = makeNote({ title: 'Borrador' })
+    await db.notes.add(note)
+    await engine.run()
+    await edit(note.id, { title: 'Plan final' })
+    await engine.run()
+    expect([...gh.files.keys()]).toEqual(['notes/Plan final.md'])
+    expect(gh.commits).toContain('rename: Borrador → Plan final')
+    expect((await db.notes.get(note.id))!.remotePath).toBe('notes/Plan final.md')
   })
 
   it('en ediciones usa el SHA remoto actual (LWW sobre cambios remotos)', async () => {
     const note = makeNote()
     await db.notes.add(note)
     await engine.run()
-    // Otro dispositivo cambió el archivo; aquí se editó en local → gana lo local.
-    await gh.write(`notes/${note.id}.md`, utf8ToBase64('remoto'))
-    await db.notes.update(note.id, { content: 'local', syncStatus: 'pending', rev: 2 })
+    await gh.write('notes/Título.md', utf8ToBase64('remoto'))
+    await edit(note.id, { content: 'local' })
     await engine.run()
-
-    expect(base64ToUtf8(gh.files.get(`notes/${note.id}.md`)!.b64)).toContain('\nlocal\n')
-    expect(gh.commits.at(-1)).toBe(`update: ${note.id}`)
+    expect(text('notes/Título.md')).toContain('\nlocal\n')
     expect((await db.notes.get(note.id))!.content).toBe('local')
   })
 
   it('no crea commits si el contenido remoto ya es idéntico', async () => {
-    const note = makeNote()
-    await gh.write(`notes/${note.id}.md`, utf8ToBase64(serializeNote(note)))
+    const note = makeNote({ remotePath: 'notes/Título.md' })
+    await gh.write('notes/Título.md', utf8ToBase64(serializeNote(note)))
     await db.notes.add(note)
     await engine.run()
     expect(gh.commits).toEqual([])
     expect((await db.notes.get(note.id))!.syncStatus).toBe('synced')
+  })
+
+  it('migra notas antiguas notes/<id>.md a su título', async () => {
+    const note = makeNote({ title: 'Antigua', remotePath: null })
+    await gh.write(`notes/${note.id}.md`, utf8ToBase64(serializeNote(note)))
+    await db.notes.add({ ...note, remotePath: `notes/${note.id}.md` })
+    await engine.run()
+    expect([...gh.files.keys()]).toEqual(['notes/Antigua.md'])
   })
 
   it('borra en remoto y elimina el tombstone local', async () => {
@@ -126,9 +162,9 @@ describe('SyncEngine push', () => {
     await engine.run()
     await db.notes.update(note.id, { syncStatus: 'deleted', rev: 2 })
     await engine.run()
-    expect(gh.files.has(`notes/${note.id}.md`)).toBe(false)
+    expect(gh.files.size).toBe(0)
     expect(await db.notes.get(note.id)).toBeUndefined()
-    expect(gh.commits.at(-1)).toBe(`delete: ${note.id}`)
+    expect(gh.commits.at(-1)).toBe('delete: Título')
   })
 
   it('sube assets pendientes antes que las notas', async () => {
@@ -151,25 +187,46 @@ describe('SyncEngine push', () => {
 
 describe('SyncEngine pull', () => {
   it('descarga notas nuevas o modificadas en remoto', async () => {
-    await gh.write('notes/remota.md', utf8ToBase64('---\ntitle: Desde el móvil\ntags: [x]\n---\n\nHola'))
+    await gh.write('notes/Desde el móvil.md', utf8ToBase64('---\nid: r1\ntitle: Desde el móvil\ntags: [x]\n---\n\nHola'))
     await gh.write('README.md', utf8ToBase64('ignorado'))
     const report = await engine.run()
     expect(report.pulled).toBe(1)
-    expect(await db.notes.get('remota')).toMatchObject({ title: 'Desde el móvil', content: 'Hola', tags: ['x'], syncStatus: 'synced' })
+    expect(await db.notes.get('r1')).toMatchObject({ title: 'Desde el móvil', content: 'Hola', tags: ['x'], syncStatus: 'synced' })
     expect(await db.notes.count()).toBe(1)
 
-    await gh.write('notes/remota.md', utf8ToBase64('---\ntitle: Editada\n---\nAdiós'))
+    await gh.write('notes/Desde el móvil.md', utf8ToBase64('---\nid: r1\ntitle: Editada\n---\nAdiós'))
     await engine.run()
-    expect(await db.notes.get('remota')).toMatchObject({ title: 'Editada', content: 'Adiós' })
+    expect(await db.notes.get('r1')).toMatchObject({ title: 'Editada', content: 'Adiós' })
+  })
+
+  it('sigue la nota por id si se renombró en otro dispositivo', async () => {
+    const note = makeNote({ title: 'Viejo' })
+    await db.notes.add(note)
+    await engine.run()
+    const md = serializeNote({ ...note, title: 'Nuevo' })
+    gh.files.delete('notes/Viejo.md')
+    await gh.write('notes/Nuevo.md', utf8ToBase64(md))
+    await engine.run()
+    expect(await db.notes.count()).toBe(1)
+    expect(await db.notes.get(note.id)).toMatchObject({ title: 'Nuevo', remotePath: 'notes/Nuevo.md' })
+  })
+
+  it('adopta archivos creados a mano sin frontmatter y les añade id', async () => {
+    await gh.write('notes/Apuntes sueltos.md', utf8ToBase64('texto libre'))
+    await engine.run()
+    const [note] = await db.notes.toArray()
+    expect(note).toMatchObject({ title: 'Apuntes sueltos', remotePath: 'notes/Apuntes sueltos.md', syncStatus: 'pending' })
+    await engine.run()
+    expect(text('notes/Apuntes sueltos.md')).toContain(`id: ${note.id}`)
+    expect(gh.files.size).toBe(1)
   })
 
   it('no sobrescribe notas con cambios locales pendientes', async () => {
     const note = makeNote()
     await db.notes.add(note)
     await engine.run()
-    await gh.write(`notes/${note.id}.md`, utf8ToBase64('remoto'))
-    await db.notes.update(note.id, { content: 'local pendiente', syncStatus: 'pending', rev: 2 })
-    // Simula un pull aislado (sin push previo) llamando a run tras fallar el push por red.
+    await gh.write('notes/Título.md', utf8ToBase64('remoto'))
+    await edit(note.id, { content: 'local pendiente' })
     const put = gh.putFile.bind(gh)
     gh.putFile = async () => {
       throw new GitHubApiError('network', 0)
@@ -184,7 +241,7 @@ describe('SyncEngine pull', () => {
     const note = makeNote()
     await db.notes.add(note)
     await engine.run()
-    gh.files.delete(`notes/${note.id}.md`)
+    gh.files.delete('notes/Título.md')
     const report = await engine.run()
     expect(report.deletedLocal).toBe(1)
     expect(await db.notes.get(note.id)).toBeUndefined()

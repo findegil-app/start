@@ -1,11 +1,38 @@
 export const NOTES_DIR = 'notes'
 export const ASSETS_DIR = 'assets'
+export const UNTITLED = 'Sin título'
 
-export const notePath = (id: string) => `${NOTES_DIR}/${id}.md`
+const MAX_NAME = 80
 
-const NOTE_PATH_RE = /^notes\/([^/]+)\.md$/
-export function noteIdFromPath(path: string): string | null {
-  return NOTE_PATH_RE.exec(path)?.[1] ?? null
+/** Nombre de archivo legible a partir del título (conserva tildes y espacios). */
+export function fileNameFromTitle(title: string): string {
+  const name = title
+    .normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f/\\:*?"<>|#%[\]^`{}]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\.+/, '')
+    .replace(/[. ]+$/, '')
+    .slice(0, MAX_NAME)
+    .trim()
+  return name || UNTITLED
+}
+
+/** notes/<Título>.md, o notes/<Título> (n).md si la ruta está ocupada (comparación sin mayúsculas). */
+export function notePathForTitle(title: string, isTaken: (lowerPath: string) => boolean): string {
+  const base = fileNameFromTitle(title)
+  for (let n = 1; ; n++) {
+    const path = `${NOTES_DIR}/${n === 1 ? base : `${base} (${n})`}.md`
+    if (!isTaken(path.toLowerCase())) return path
+  }
+}
+
+const NOTE_PATH_RE = /^notes\/.+\.md$/i
+export const isNotePath = (path: string) => NOTE_PATH_RE.test(path)
+
+/** Nombre sin carpeta ni extensión: se usa como título si el archivo no tiene frontmatter. */
+export function titleFromPath(path: string): string {
+  return path.replace(/^.*\//, '').replace(/\.md$/i, '')
 }
 
 /** Referencia usada dentro del Markdown (relativa a notes/, así también se ve bien en GitHub). */

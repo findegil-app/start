@@ -1,73 +1,104 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { DEFAULT_REPO, login } from '../stores/auth'
+import { userConfig } from '../config/users'
+import { renderGoogleButton } from '../lib/google'
+import { credentials, session, setGitHubToken, signInWithGoogle, signOut } from '../stores/auth'
 
 const router = useRouter()
 const logo = `${import.meta.env.BASE_URL}logo.svg`
+const googleBtn = ref<HTMLElement>()
 const token = ref('')
-const repo = ref(DEFAULT_REPO)
 const error = ref('')
-const submitting = ref(false)
+const busy = ref(false)
 
-async function submit() {
+async function goHome() {
+  if (session.value && credentials.value) await router.replace({ name: 'home' })
+}
+
+async function onGoogle(idToken: string) {
   error.value = ''
-  submitting.value = true
   try {
-    await login(token.value, repo.value)
-    token.value = ''
-    await router.replace({ name: 'home' })
+    await signInWithGoogle(idToken)
+    await goHome()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    submitting.value = false
   }
 }
 
-const tokenUrl =
-  'https://github.com/settings/personal-access-tokens/new?name=Findegil&description=Findegil%20notes&contents=write'
+async function mountGoogle() {
+  if (session.value || !googleBtn.value) return
+  try {
+    await renderGoogleButton(googleBtn.value, onGoogle)
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+async function submitToken() {
+  error.value = ''
+  busy.value = true
+  try {
+    await setGitHubToken(token.value)
+    token.value = ''
+    await goHome()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function switchAccount() {
+  await signOut()
+  error.value = ''
+}
+
+onMounted(mountGoogle)
+// Tras cerrar sesión el botón de Google vuelve a montarse.
+watch(session, (s) => !s && setTimeout(mountGoogle))
+
+const tokenUrl = 'https://github.com/settings/personal-access-tokens/new?name=Findegil&contents=write'
+const repoName = () => {
+  const cfg = userConfig(session.value?.email)
+  return cfg ? `${cfg.owner}/${cfg.repo}` : ''
+}
 </script>
 
 <template>
   <main class="login">
-    <form class="login-card" @submit.prevent="submit">
+    <div class="login-card">
       <img :src="logo" alt="" class="login-logo" width="64" height="64" />
       <h1>Findegil</h1>
-      <p class="muted">Tus notas, primero en este dispositivo y respaldadas en tu repositorio privado de GitHub.</p>
 
-      <label>
-        Repositorio de notas
-        <input v-model="repo" autocomplete="off" autocapitalize="off" spellcheck="false" required placeholder="owner/repo" />
-      </label>
+      <template v-if="!session">
+        <p class="muted">Inicia sesión con tu cuenta de Google.</p>
+        <div ref="googleBtn" class="google-btn" />
+      </template>
 
-      <label>
-        Personal Access Token (fine-grained)
-        <input
-          v-model="token"
-          type="password"
-          autocomplete="off"
-          spellcheck="false"
-          required
-          placeholder="github_pat_…"
-        />
-      </label>
-
-      <details class="help">
-        <summary>¿Cómo creo el token?</summary>
-        <ol>
-          <li>
-            Abre <a :href="tokenUrl" target="_blank" rel="noopener">GitHub → Fine-grained tokens</a>.
-          </li>
-          <li><em>Repository access</em>: <strong>Only select repositories</strong> → <code>{{ repo }}</code>.</li>
-          <li><em>Permissions → Contents</em>: <strong>Read and write</strong>. Nada más.</li>
-        </ol>
-        <p>El token solo se guarda en este dispositivo (IndexedDB) y solo se envía a api.github.com.</p>
-      </details>
+      <form v-else class="token-step" @submit.prevent="submitToken">
+        <p class="muted">
+          Hola, <strong>{{ session.name ?? session.email }}</strong>. Primera vez en este dispositivo: conecta tu
+          almacenamiento de notas.
+        </p>
+        <label>
+          Token de GitHub
+          <input v-model="token" type="password" autocomplete="off" spellcheck="false" required placeholder="github_pat_…" />
+        </label>
+        <details class="help">
+          <summary>¿Cómo creo el token?</summary>
+          <ol>
+            <li>Abre <a :href="tokenUrl" target="_blank" rel="noopener">GitHub → Fine-grained tokens</a>.</li>
+            <li><em>Repository access</em>: <strong>Only select repositories</strong> → <code>{{ repoName() }}</code>.</li>
+            <li><em>Permissions → Contents</em>: <strong>Read and write</strong>.</li>
+          </ol>
+          <p>Se guarda solo en este dispositivo y solo se envía a api.github.com.</p>
+        </details>
+        <button class="primary" type="submit" :disabled="busy">{{ busy ? 'Verificando…' : 'Conectar' }}</button>
+        <button type="button" class="link-btn" @click="switchAccount">Usar otra cuenta</button>
+      </form>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <button class="primary" type="submit" :disabled="submitting">
-        {{ submitting ? 'Verificando…' : 'Entrar' }}
-      </button>
-    </form>
+    </div>
   </main>
 </template>

@@ -1,5 +1,6 @@
 import YAML from 'yaml'
 import type { Note } from '../db'
+import { titleFromPath } from './paths'
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/
 const KNOWN = new Set(['id', 'title', 'date', 'updated', 'tags'])
@@ -35,8 +36,11 @@ function asIsoString(raw: unknown): string | undefined {
   return undefined
 }
 
-/** Parsea un archivo .md del repo. El `id` lo determina el nombre del archivo. */
-export function parseNote(id: string, text: string): ParsedNote {
+/**
+ * Parsea un archivo .md del repo. El `id` viene del frontmatter; si falta (archivo creado a mano)
+ * se genera uno nuevo y `hasId` es false para que el sync lo escriba de vuelta.
+ */
+export function parseNote(text: string, path: string): ParsedNote & { hasId: boolean } {
   let data: Record<string, unknown> = {}
   let body = text
   const m = FM_RE.exec(text)
@@ -52,7 +56,10 @@ export function parseNote(id: string, text: string): ParsedNote {
   body = body.replace(/^\s*\n/, '').replace(/\s+$/, '')
 
   const heading = /^#\s+(.+)$/m.exec(body)?.[1]?.trim()
-  const title = typeof data.title === 'string' || typeof data.title === 'number' ? String(data.title) : (heading ?? '')
+  const title =
+    typeof data.title === 'string' || typeof data.title === 'number' ? String(data.title) : (heading ?? titleFromPath(path))
+  const hasId = typeof data.id === 'string' && data.id.trim() !== ''
+  const id = hasId ? String(data.id).trim() : crypto.randomUUID()
   const createdAt = asIsoString(data.date) ?? new Date().toISOString()
   const updatedAt = asIsoString(data.updated) ?? createdAt
 
@@ -61,6 +68,7 @@ export function parseNote(id: string, text: string): ParsedNote {
 
   return {
     id,
+    hasId,
     title,
     content: body,
     tags: normalizeTags(data.tags),

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { credentials, logout } from './stores/auth'
+import { credentials, forgetGitHubToken } from './stores/auth'
 import { startSync, stopSync } from './sync/controller'
 
 const router = useRouter()
 
-// 401 → borrar token, parar el motor y volver al login.
+// 401 → borrar el token de GitHub, parar el motor y volver al login (paso del token).
 async function onUnauthorized() {
-  await logout()
+  await forgetGitHubToken()
   await router.replace({ name: 'login' })
 }
 

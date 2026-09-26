@@ -3,7 +3,7 @@ import Dexie, { type EntityTable } from 'dexie'
 export type SyncStatus = 'synced' | 'pending' | 'deleted'
 
 export interface Note {
-  /** UUID; también es el nombre del archivo remoto: notes/<id>.md */
+  /** UUID estable (se guarda en el frontmatter; el archivo se nombra por título). */
   id: string
   title: string
   /** Cuerpo de la nota en Markdown (sin frontmatter). */
@@ -12,6 +12,8 @@ export interface Note {
   createdAt: string
   updatedAt: string
   syncStatus: SyncStatus
+  /** Ruta actual en el repo (notes/<Título>.md); null si nunca se ha subido. */
+  remotePath: string | null
   /** SHA del blob en GitHub la última vez que local y remoto coincidieron. */
   remoteSha: string | null
   /** Contador de revisiones locales; evita marcar como sincronizada una nota editada durante un sync. */
@@ -48,6 +50,19 @@ export function createDb(name = 'findegil'): FindegilDB {
     assets: 'path, syncStatus',
     kv: 'key',
   })
+  // v2: los archivos pasan de notes/<id>.md a notes/<Título>.md → se guarda la ruta remota.
+  db.version(2)
+    .stores({ notes: 'id, updatedAt, syncStatus, remotePath, *tags' })
+    .upgrade((tx) =>
+      tx
+        .table('notes')
+        .toCollection()
+        .modify((n: Note) => {
+          n.remotePath = n.remoteSha ? `notes/${n.id}.md` : null
+          // Se re-sube para que el archivo se renombre al título.
+          if (n.remoteSha && n.syncStatus === 'synced') n.syncStatus = 'pending'
+        }),
+    )
   return db
 }
 

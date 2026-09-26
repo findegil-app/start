@@ -28,15 +28,26 @@ PWA de notas **local-first** que usa un repositorio privado de GitHub como base 
 ### Estructura del repo de notas
 
 ```
-notes/<uuid>.md      # YAML frontmatter (id, title, date, updated, tags) + cuerpo Markdown
+notes/<Título>.md    # YAML frontmatter (id, title, date, updated, tags) + cuerpo Markdown
 assets/<uuid>.webp   # imágenes redimensionadas a ≤1920px y convertidas a WebP
 ```
 
+- El archivo se nombra por **título** (sin `/ \ : * ? " < > | # %`); si se repite, `Título (2).md`. Cambiar el título mueve el archivo.
+- La identidad estable es el `id` del frontmatter: una nota renombrada desde otro dispositivo se reconoce por él.
+- Un `.md` creado a mano en `notes/` se importa (título = nombre de archivo) y en el siguiente sync se le añade frontmatter.
+
 Las imágenes se referencian como `../assets/<uuid>.webp`, por lo que también se ven al navegar el repo en GitHub. Las creadas en otro dispositivo se descargan bajo demanda y se cachean en IndexedDB.
+
+## Autenticación
+
+1. **Google Sign-In** (Google Identity Services, mismo cliente OAuth que `rdr-nfq/team-hub`). Solo entran los correos de `src/config/users.ts`, y cada correo tiene asociado su repositorio de notas (el repo no se muestra ni se elige en la UI).
+2. **Token de GitHub**, una vez por dispositivo: fine-grained PAT con acceso **solo** al repo de notas y **Contents: Read and write**. Se guarda únicamente en IndexedDB.
+
+> La comprobación de Google es solo del lado del cliente (no hay backend que verifique la firma del ID token). La protección real de los datos es el token de GitHub, que nunca está en el código.
 
 ## Puesta en marcha
 
-1. **Token**: crea un [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) con acceso **solo** a `pablolloce/red-notes` y permiso **Contents: Read and write**. El token se guarda únicamente en IndexedDB del dispositivo.
+1. **Google Cloud**: en el cliente OAuth `535974839401-…` añade a *Orígenes de JavaScript autorizados*: `https://findegil-app.github.io`, `http://localhost:5173` y `http://localhost:4173`.
 2. **GitHub Pages**: tras el primer push a `main`, la action `Deploy to GitHub Pages` crea la rama `gh-pages`. En *Settings → Pages* elige *Deploy from a branch* → `gh-pages` / `/ (root)`. La app quedará en `https://<owner>.github.io/start/`.
 
 ## Desarrollo
