@@ -41,7 +41,7 @@ export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
         name: 'Findegil',
         short_name: 'Findegil',
         description: 'Notas local-first respaldadas en un repositorio privado de GitHub',
-        lang: 'es',
+        lang: 'en',
         theme_color: '#14182b',
         background_color: '#14182b',
         display: 'standalone',

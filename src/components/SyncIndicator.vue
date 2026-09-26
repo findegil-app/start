@@ -6,22 +6,22 @@ import { requestSync, syncStatus } from '../sync/controller'
 const pending = usePendingCount()
 
 const label = computed(() => {
-  const plural = pending.value === 1 ? 'pendiente' : 'pendientes'
+  const plural = 'pending'
   switch (syncStatus.state) {
     case 'syncing':
-      return 'Sincronizando'
+      return 'Syncing'
     case 'offline':
-      return pending.value ? `Sin conexión · ${pending.value} ${plural}` : 'Sin conexión'
+      return pending.value ? `Offline · ${pending.value} ${plural}` : 'Offline'
     case 'error':
-      return 'Error de sincronización'
+      return 'Sync error'
     default:
-      return pending.value ? `${pending.value} ${plural}` : 'Sincronizado'
+      return pending.value ? `${pending.value} ${plural}` : 'Synced'
   }
 })
 
 const title = computed(() => {
-  const last = syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'nunca'
-  return [`Última sincronización: ${last}`, syncStatus.lastError, 'Pulsa para sincronizar ahora'].filter(Boolean).join('\n')
+  const last = syncStatus.lastSyncAt ? new Date(syncStatus.lastSyncAt).toLocaleString() : 'never'
+  return [`Last sync: ${last}`, syncStatus.lastError, 'Click to sync now'].filter(Boolean).join('\n')
 })
 
 const tone = computed(() => {

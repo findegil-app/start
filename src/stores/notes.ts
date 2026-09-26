@@ -1,8 +1,8 @@
 import { liveQuery } from 'dexie'
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
-import { db, type Note } from '../db'
-import { assetRef } from '../lib/paths'
+import { db, type Bucket, type Note } from '../db'
 import { compressImage } from '../lib/image'
+import { assetRef } from '../lib/paths'
 import { EDIT_DEBOUNCE_MS, requestSync } from '../sync/controller'
 
 /** Suscribe un ref de Vue a una consulta reactiva de Dexie (se actualiza también con cambios del worker). */
@@ -24,47 +24,98 @@ export function useLiveQuery<T>(query: () => Promise<T>, deps: () => unknown = (
   return result as Ref<T | undefined>
 }
 
-export type NoteSummary = Pick<Note, 'id' | 'title' | 'tags' | 'updatedAt' | 'syncStatus'> & { excerpt: string }
+/** Ubicación de una nota dentro de PARA. */
+export type Location = { bucket: 'inbox' } | { bucket: 'scratch' } | { bucket: 'container'; containerId: string }
+
+export const locationOf = (n: Pick<Note, 'bucket' | 'containerId'>): Location =>
+  n.bucket === 'container' && n.containerId ? { bucket: 'container', containerId: n.containerId } : { bucket: n.bucket as 'inbox' | 'scratch' }
+
+export type NoteSummary = Pick<Note, 'id' | 'title' | 'tags' | 'updatedAt' | 'syncStatus' | 'due' | 'remind' | 'done' | 'bucket' | 'containerId'> & {
+  excerpt: string
+}
 
 function excerpt(content: string): string {
   return content
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, '')
     .replace(/[#>*_`~\-[\]()]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 140)
 }
 
-export function useNoteList(search: Ref<string>) {
+const summary = (n: Note): NoteSummary => ({
+  id: n.id,
+  title: n.title,
+  tags: n.tags,
+  updatedAt: n.updatedAt,
+  syncStatus: n.syncStatus,
+  due: n.due,
+  remind: n.remind,
+  done: n.done,
+  bucket: n.bucket,
+  containerId: n.containerId,
+  excerpt: excerpt(n.content),
+})
+
+function matches(n: Note, terms: string[]) {
+  if (!terms.length) return true
+  const hay = `${n.title}\n${n.tags.join(' ')}\n${n.content}`.toLowerCase()
+  return terms.every((t) => (t.startsWith('#') ? n.tags.some((tag) => tag.toLowerCase() === t.slice(1)) : hay.includes(t)))
+}
+
+/** Notas de una ubicación, más recientes primero; las hechas al final. */
+export function useNotesIn(location: Ref<Location | null>, search: Ref<string>) {
   return useLiveQuery(
     async (): Promise<NoteSummary[]> => {
+      const loc = location.value
+      if (!loc) return []
       const terms = search.value.toLowerCase().split(/\s+/).filter(Boolean)
-      const notes = await db.notes.orderBy('updatedAt').reverse().filter((n) => n.syncStatus !== 'deleted').toArray()
-      return notes
-        .filter((n) => {
-          if (!terms.length) return true
-          const hay = `${n.title}\n${n.tags.join(' ')}\n${n.content}`.toLowerCase()
-          return terms.every((t) => (t.startsWith('#') ? n.tags.some((tag) => tag.toLowerCase() === t.slice(1)) : hay.includes(t)))
-        })
-        .map((n) => ({ id: n.id, title: n.title, tags: n.tags, updatedAt: n.updatedAt, syncStatus: n.syncStatus, excerpt: excerpt(n.content) }))
+      const rows =
+        loc.bucket === 'container'
+          ? await db.notes.where('containerId').equals(loc.containerId).toArray()
+          : await db.notes.where('bucket').equals(loc.bucket).toArray()
+      return rows
+        .filter((n) => n.syncStatus !== 'deleted' && (loc.bucket !== 'container' || n.bucket === 'container') && matches(n, terms))
+        .sort((a, b) => Number(a.done) - Number(b.done) || b.updatedAt.localeCompare(a.updatedAt))
+        .map(summary)
     },
-    () => search.value,
+    () => [JSON.stringify(location.value), search.value],
   )
+}
+
+/** Recuento de notas por ubicación (para los contadores de la barra lateral). */
+export function useCounts() {
+  return useLiveQuery(async () => {
+    const counts = { inbox: 0, scratch: 0, pending: 0, byContainer: new Map<string, number>() }
+    await db.notes.each((n) => {
+      if (n.syncStatus !== 'synced') counts.pending++
+      if (n.syncStatus === 'deleted') return
+      if (n.bucket === 'inbox') counts.inbox++
+      else if (n.bucket === 'scratch') counts.scratch++
+      else if (n.containerId) counts.byContainer.set(n.containerId, (counts.byContainer.get(n.containerId) ?? 0) + 1)
+    })
+    counts.pending += await db.assets.where('syncStatus').equals('pending').count()
+    counts.pending += await db.containers.where('syncStatus').anyOf('pending', 'deleted').count()
+    return counts
+  })
 }
 
 export function usePendingCount() {
   return useLiveQuery(async () => {
-    const [notes, assets] = await Promise.all([
+    const [notes, assets, containers] = await Promise.all([
       db.notes.where('syncStatus').anyOf('pending', 'deleted').count(),
       db.assets.where('syncStatus').equals('pending').count(),
+      db.containers.where('syncStatus').anyOf('pending', 'deleted').count(),
     ])
-    return notes + assets
+    return notes + assets + containers
   })
 }
 
-export function useNote(id: Ref<string>) {
+export function useNote(id: Ref<string | null>) {
   return useLiveQuery(
     async () => {
+      if (!id.value) return null
       const note = await db.notes.get(id.value)
       return note && note.syncStatus !== 'deleted' ? note : null
     },
@@ -72,7 +123,7 @@ export function useNote(id: Ref<string>) {
   )
 }
 
-export async function createNote(): Promise<string> {
+export async function createNote(location: Location = { bucket: 'inbox' }, fields: Partial<Pick<Note, 'title' | 'content' | 'due' | 'remind'>> = {}): Promise<string> {
   const now = new Date().toISOString()
   const note: Note = {
     id: crypto.randomUUID(),
@@ -81,41 +132,46 @@ export async function createNote(): Promise<string> {
     tags: [],
     createdAt: now,
     updatedAt: now,
+    bucket: location.bucket as Bucket,
+    containerId: location.bucket === 'container' ? location.containerId : null,
+    due: null,
+    remind: null,
+    done: false,
     syncStatus: 'pending',
     remotePath: null,
     remoteSha: null,
     rev: 1,
+    ...fields,
   }
   await db.notes.add(note)
   requestSync(EDIT_DEBOUNCE_MS)
   return note.id
 }
 
+type Editable = Pick<Note, 'title' | 'content' | 'tags' | 'due' | 'remind' | 'done' | 'bucket' | 'containerId'>
+
 /** Escritura local inmediata + marca pending. La UI no espera a la red. */
-export async function updateNote(id: string, patch: Partial<Pick<Note, 'title' | 'content' | 'tags'>>) {
+export async function updateNote(id: string, patch: Partial<Editable>, syncDelay = EDIT_DEBOUNCE_MS) {
   await db.transaction('rw', db.notes, async () => {
     const note = await db.notes.get(id)
     if (!note || note.syncStatus === 'deleted') return
-    const changed = (Object.keys(patch) as (keyof typeof patch)[]).some(
-      (k) => JSON.stringify(note[k]) !== JSON.stringify(patch[k]),
-    )
+    const changed = (Object.keys(patch) as (keyof Editable)[]).some((k) => JSON.stringify(note[k]) !== JSON.stringify(patch[k]))
     if (!changed) return
-    await db.notes.update(id, {
-      ...patch,
-      updatedAt: new Date().toISOString(),
-      syncStatus: 'pending',
-      rev: note.rev + 1,
-    })
+    await db.notes.update(id, { ...patch, updatedAt: new Date().toISOString(), syncStatus: 'pending', rev: note.rev + 1 })
   })
-  requestSync(EDIT_DEBOUNCE_MS)
+  requestSync(syncDelay)
+}
+
+/** Clasificar: mover a la Landing Zone, Scratch o un proyecto/área/recurso. */
+export function moveNote(id: string, to: Location) {
+  return updateNote(id, { bucket: to.bucket as Bucket, containerId: to.bucket === 'container' ? to.containerId : null }, 2000)
 }
 
 export async function deleteNote(id: string) {
   await db.transaction('rw', db.notes, async () => {
     const note = await db.notes.get(id)
     if (!note) return
-    // Nunca subida y sin SHA remoto: basta con borrarla localmente... salvo que haya un PUT en vuelo;
-    // el tombstone cubre ambos casos y el worker lo limpia.
+    // Tombstone: el worker borra el archivo remoto y luego la fila.
     await db.notes.update(id, { syncStatus: 'deleted', rev: note.rev + 1, updatedAt: new Date().toISOString() })
   })
   requestSync()

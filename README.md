@@ -21,22 +21,27 @@ PWA de notas **local-first** que usa un repositorio privado de GitHub como base 
 2. Un **Web Worker** (`src/sync/sync.worker.ts`) ejecuta el motor de sync (`src/sync/engine.ts`):
    - al arrancar, cada 5 min, al recuperar conexión, al volver a la pestaña, 20 s después de una edición, o al pulsar el indicador de sync;
    - solo si `navigator.onLine`, y con Web Locks para que no sincronicen dos pestañas a la vez.
-3. **Push**: assets pendientes → notas pendientes/borradas. Para cada archivo hace `GET` del SHA remoto y luego `PUT`/`DELETE` con ese SHA (mensajes `create: <id>`, `update: <id>`, `delete: <id>`). Si el contenido ya es idéntico (SHA git calculado en local) no se crea commit.
-4. **Pull**: lee el árbol recursivo de la rama y descarga los `notes/*.md` cuyo SHA cambió. Las notas con cambios locales pendientes nunca se sobrescriben (**Last-Write-Wins** a favor de lo local). Las notas sincronizadas que desaparecen del remoto se borran en local.
+3. **Push**: todo lo pendiente (notas, contenedores, imágenes, movimientos y borrados) se agrupa en un commit (`createTree` + `createCommit` + `updateRef`). Si otro dispositivo sincronizó a la vez, se reintenta sobre la rama nueva. Contenido idéntico (SHA git calculado en local) no genera cambios.
+4. **Pull**: lee el árbol de la rama y descarga los blobs cuyo SHA cambió; la carpeta decide la ubicación PARA. Lo pendiente en local nunca se sobrescribe (**Last-Write-Wins** a favor de lo local).
 5. **401** → se borra el token, se detiene el worker y se vuelve al login.
 
-### Estructura del repo de notas
+### Estructura del repo de notas (método PARA)
 
 ```
-notes/<Título>.md    # YAML frontmatter (id, title, date, updated, tags) + cuerpo Markdown
-assets/<uuid>.webp   # imágenes redimensionadas a ≤1920px y convertidas a WebP
+00 Landing Zone/<Título>.md            # capturas sin clasificar (inbox)
+01 Projects/<Proyecto>/_project.md     # metadatos: id, name, status, deadline; cuerpo = descripción
+01 Projects/<Proyecto>/<Título>.md
+02 Areas/<Área>/_area.md
+03 Resources/<Recurso>/_resource.md
+04 Archive/{Projects,Areas,Resources}/<Nombre>/…   # contenedores archivados (se mueve la carpeta entera)
+Scratch/<Título>.md                    # notas temporales (lista de la compra…)
+assets/<uuid>.webp                     # imágenes (referenciadas como /assets/… desde cualquier nota)
 ```
 
-- El archivo se nombra por **título** (sin `/ \ : * ? " < > | # %`); si se repite, `Título (2).md`. Cambiar el título mueve el archivo.
-- La identidad estable es el `id` del frontmatter: una nota renombrada desde otro dispositivo se reconoce por él.
-- Un `.md` creado a mano en `notes/` se importa (título = nombre de archivo) y en el siguiente sync se le añade frontmatter.
-
-Las imágenes se referencian como `../assets/<uuid>.webp`, por lo que también se ven al navegar el repo en GitHub. Las creadas en otro dispositivo se descargan bajo demanda y se cachean en IndexedDB.
+- Frontmatter de nota: `id`, `title`, `date`, `updated`, `tags` y, si aplica, `due` (`YYYY-MM-DD` o `YYYY-MM-DDTHH:mm`), `remind` y `done`.
+- Cada sincronización sube **todos** los cambios (ediciones, movimientos, archivados, borrados, imágenes) en **un único commit** (Git Data API).
+- La carpeta manda: mover un archivo en GitHub a otra carpeta PARA cambia su ubicación en la app; una carpeta de proyecto/área/recurso sin `_meta` se adopta como contenedor nuevo.
+- Las notas de la estructura antigua (`notes/`) se migran solas a la Landing Zone.
 
 ## Autenticación
 

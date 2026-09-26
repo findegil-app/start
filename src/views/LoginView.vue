@@ -13,7 +13,7 @@ const busy = ref(false)
 const copied = ref(false)
 
 async function goHome() {
-  if (session.value && credentials.value) await router.replace({ name: 'home' })
+  if (session.value && credentials.value) await router.replace({ name: 'inbox' })
 }
 
 async function run(action: () => Promise<void>) {
@@ -69,34 +69,34 @@ watch(session, (s) => !s && setTimeout(mountGoogle))
       <h1>Findegil</h1>
 
       <template v-if="!session">
-        <p class="muted">Inicia sesión con tu cuenta de Google.</p>
+        <p class="muted">Sign in with your Google account.</p>
         <div ref="googleBtn" class="google-btn" />
       </template>
 
       <div v-else class="token-step">
         <p class="muted">
-          Hola, <strong>{{ session.name ?? session.email }}</strong>.
-          <template v-if="busy">Conectando con tus notas…</template>
+          Hi, <strong>{{ session.name ?? session.email }}</strong>.
+          <template v-if="busy">Connecting to your notes…</template>
         </p>
 
         <template v-if="errorCode === 'missing' || errorCode === 'mismatch'">
           <p class="error" role="alert">{{ error }}</p>
           <div class="help">
-            <p>Para configurarlo, añade este ID como secreto <code>NOTES_GOOGLE_SUB</code> en GitHub Actions y relanza el despliegue:</p>
+            <p>To set it up, add this ID as the <code>NOTES_GOOGLE_SUB</code> secret in GitHub Actions and re-run the deploy:</p>
             <div class="sub-box">
               <code>{{ session.sub }}</code>
-              <button type="button" class="link-btn" @click="copySub">{{ copied ? 'Copiado' : 'Copiar' }}</button>
+              <button type="button" class="link-btn" @click="copySub">{{ copied ? 'Copied' : 'Copy' }}</button>
             </div>
           </div>
         </template>
         <template v-else-if="errorCode === 'expired'">
           <p class="error" role="alert">{{ error }}</p>
-          <p class="help">Crea un token nuevo, actualiza el secreto <code>NOTES_TOKEN</code> y relanza el despliegue.</p>
+          <p class="help">Create a new token, update the <code>NOTES_TOKEN</code> secret and re-run the deploy.</p>
         </template>
         <p v-else-if="error" class="error" role="alert">{{ error }}</p>
 
-        <button v-if="error" class="primary" type="button" :disabled="busy" @click="run(unlockRepo)">Reintentar</button>
-        <button type="button" class="link-btn" @click="switchAccount">Usar otra cuenta</button>
+        <button v-if="error" class="primary" type="button" :disabled="busy" @click="run(unlockRepo)">Retry</button>
+        <button type="button" class="link-btn" @click="switchAccount">Use another account</button>
       </div>
 
       <p v-if="error && !session" class="error" role="alert">{{ error }}</p>

@@ -29,8 +29,8 @@ function onKey(e: KeyboardEvent) {
   <div class="tag-input">
     <span v-for="tag in tags" :key="tag" class="tag">
       #{{ tag }}
-      <button type="button" :aria-label="`Quitar etiqueta ${tag}`" @click="remove(tag)">×</button>
+      <button type="button" :aria-label="`Remove tag ${tag}`" @click="remove(tag)">×</button>
     </span>
-    <input v-model="draft" placeholder="Añadir etiqueta…" enterkeyhint="done" @keydown="onKey" @blur="commit" />
+    <input v-model="draft" placeholder="Add tag…" enterkeyhint="done" @keydown="onKey" @blur="commit" />
   </div>
 </template>

@@ -1,8 +1,9 @@
-import type { FindegilDB, Note } from '../db'
-import { isStatus, type GitHubApi } from '../github/client'
+import type { Container, FindegilDB, Note } from '../db'
+import { ConflictError, type GitHubApi, type RepoHead, type TreeChange } from '../github/client'
 import { base64ToUtf8, bytesToBase64, gitBlobSha, utf8Bytes } from '../lib/encoding'
-import { parseNote, serializeNote } from '../lib/frontmatter'
-import { fileNameFromTitle, isNotePath, NOTES_DIR, notePathForTitle } from '../lib/paths'
+import { parseContainer, parseNote, serializeContainer, serializeNote } from '../lib/frontmatter'
+import { classifyFolder, containerBaseFolder, dirname, META_FILE, noteFolder, parseMetaPath } from '../lib/para'
+import { fileNameFromTitle, notePathForTitle, pathMatchesTitle, uniqueFolder } from '../lib/paths'
 
 export interface SyncReport {
   pushed: number
@@ -14,24 +15,18 @@ export interface SyncReport {
 }
 
 const lower = (p: string) => p.toLowerCase()
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const isMarkdown = (p: string) => /\.md$/i.test(p)
 
-/** ¿La ruta actual sigue correspondiendo al título? (acepta el sufijo " (n)" de colisiones) */
-function pathMatchesTitle(path: string, title: string): boolean {
-  const base = escapeRe(fileNameFromTitle(title))
-  return new RegExp(`^${NOTES_DIR}/${base}(?: \\(\\d+\\))?\\.md$`, 'i').test(path)
-}
-
-const label = (note: Pick<Note, 'title'>) => fileNameFromTitle(note.title)
+type Planned<T> = { item: T; path: string; sha: string | null }
 
 /**
- * Motor de sincronización local ⇄ GitHub.
+ * Motor de sincronización local ⇄ GitHub con estructura PARA.
  *
- * - Los archivos se nombran por título (notes/<Título>.md); el id estable vive en el frontmatter.
- * - Push: assets y notas pendientes → PUT/DELETE en la Contents API (GET previo del SHA).
- *   Si cambia el título, el archivo se mueve (PUT en la ruta nueva + DELETE de la antigua).
- * - Pull: árbol recursivo de la rama → descarga los blobs cuyo SHA cambió y los empareja por ruta o por id.
- * - Conflictos: Last-Write-Wins a favor del cambio local (las notas pendientes nunca se sobrescriben).
+ * - Push: todos los cambios pendientes (notas, contenedores, imágenes, movimientos entre carpetas y
+ *   borrados) se agrupan en UN commit mediante la Git Data API.
+ * - Pull: se lee el árbol de la rama y se descargan los blobs cuyo SHA cambió; la carpeta de cada
+ *   archivo determina si la nota está en la Landing Zone, Scratch o en un proyecto/área/recurso.
+ * - Conflictos: Last-Write-Wins a favor del cambio local (lo pendiente nunca se sobrescribe).
  */
 export class SyncEngine {
   private db: FindegilDB
@@ -44,150 +39,255 @@ export class SyncEngine {
 
   async run(): Promise<SyncReport> {
     const report: SyncReport = { pushed: 0, deletedRemote: 0, pulled: 0, deletedLocal: 0, assetsPushed: 0, errors: [] }
-    // Assets primero para que las notas que los referencian nunca apunten a archivos inexistentes.
-    await this.pushAssets(report)
-    await this.pushNotes(report)
-    await this.pull(report)
+    let head = await this.gh.getHead()
+    let remote = await this.remoteMap(head)
+    try {
+      head = await this.push(head, remote, report)
+    } catch (err) {
+      if (!(err instanceof ConflictError)) throw err
+      // Otro dispositivo sincronizó a la vez: se repite con la rama actualizada.
+      head = await this.gh.getHead()
+      remote = await this.remoteMap(head)
+      head = await this.push(head, remote, report)
+    }
+    remote = await this.remoteMap(head)
+    await this.pull(remote, report)
     return report
   }
 
-  private async pushAssets(report: SyncReport) {
-    const pending = await this.db.assets.where('syncStatus').equals('pending').toArray()
-    for (const asset of pending) {
-      try {
-        const bytes = new Uint8Array(await asset.blob.arrayBuffer())
-        const localSha = await gitBlobSha(bytes)
-        const remoteSha = await this.gh.getFileSha(asset.path)
-        const sha =
-          remoteSha === localSha
-            ? remoteSha
-            : await this.gh.putFile(asset.path, bytesToBase64(bytes), `asset: ${asset.path}`, remoteSha ?? undefined)
-        await this.db.assets.update(asset.path, { syncStatus: 'synced', remoteSha: sha })
-        report.assetsPushed++
-      } catch (err) {
-        this.handleItemError(err, report, asset.path)
-      }
-    }
+  private async remoteMap(head: RepoHead | null): Promise<Map<string, string>> {
+    const map = new Map<string, string>()
+    if (!head) return map
+    for (const e of await this.gh.getTree(head.treeSha)) if (e.type === 'blob') map.set(e.path, e.sha)
+    return map
   }
 
-  private async pushNotes(report: SyncReport) {
-    const pending = await this.db.notes.where('syncStatus').anyOf('pending', 'deleted').toArray()
-    if (!pending.length) return
+  // ------------------------------------------------------------------ push
 
-    // Rutas ocupadas (remotas + reservadas por otras notas locales) para resolver colisiones de título.
-    const taken = new Set<string>()
-    for (const e of await this.gh.getTree()) if (e.type === 'blob' && isNotePath(e.path)) taken.add(lower(e.path))
-    for (const n of await this.db.notes.toArray()) if (n.remotePath) taken.add(lower(n.remotePath))
+  private async push(head: RepoHead | null, remote: Map<string, string>, report: SyncReport): Promise<RepoHead | null> {
+    const [notes, containers, assets] = await Promise.all([
+      this.db.notes.toArray(),
+      this.db.containers.toArray(),
+      this.db.assets.where('syncStatus').equals('pending').toArray(),
+    ])
 
-    for (const note of pending) {
-      try {
-        if (note.syncStatus === 'deleted') {
-          await this.pushDelete(note, taken)
+    const takenFiles = new Set([...remote.keys()].map(lower))
+    const takenFolders = new Set([...remote.keys()].map((p) => lower(dirname(p))))
+
+    // 1. Carpeta de cada contenedor (se mantiene si sigue cuadrando con nombre/estado).
+    const folders = new Map<string, string>()
+    const liveContainers = containers.filter((c) => c.syncStatus !== 'deleted')
+    for (const c of liveContainers) {
+      const base = containerBaseFolder(c)
+      if (c.remotePath && pathMatchesFolder(c.remotePath, base)) folders.set(c.id, c.remotePath)
+    }
+    const used = new Set([...folders.values()].map(lower))
+    for (const c of liveContainers) {
+      if (folders.has(c.id)) continue
+      const folder = uniqueFolder(containerBaseFolder(c), (f) => used.has(f) || (takenFolders.has(f) && lower(c.remotePath ?? '') !== f))
+      folders.set(c.id, folder)
+      used.add(lower(folder))
+    }
+
+    const changes: TreeChange[] = []
+    const deletes = new Set<string>()
+    const del = (path: string | null) => {
+      if (path && remote.has(path)) deletes.add(path)
+    }
+
+    // 2. Metadatos de contenedores.
+    const plannedContainers: Planned<Container>[] = []
+    for (const c of containers) {
+      if (c.syncStatus === 'deleted') {
+        if (c.remotePath) del(`${c.remotePath}/${META_FILE[c.kind]}`)
+        plannedContainers.push({ item: c, path: '', sha: null })
+        continue
+      }
+      const folder = folders.get(c.id)!
+      const metaPath = `${folder}/${META_FILE[c.kind]}`
+      const moved = c.remotePath !== folder
+      if (c.syncStatus !== 'pending' && !moved) continue
+      const text = serializeContainer(c)
+      const sha = await gitBlobSha(utf8Bytes(text))
+      if (remote.get(metaPath) !== sha) changes.push({ path: metaPath, content: text })
+      if (moved && c.remotePath) del(`${c.remotePath}/${META_FILE[c.kind]}`)
+      plannedContainers.push({ item: c, path: folder, sha })
+    }
+
+    // 3. Notas: pendientes, borradas o cuya carpeta ya no es la que les toca (p. ej. su proyecto se archivó).
+    const plannedNotes: Planned<Note>[] = []
+    const reserved = new Set<string>()
+    for (const n of notes) {
+      if (n.syncStatus === 'deleted') {
+        del(n.remotePath)
+        plannedNotes.push({ item: n, path: '', sha: null })
+        continue
+      }
+      const folder = noteFolder(n, folders)
+      const inPlace = n.remotePath !== null && pathMatchesTitle(n.remotePath, folder, n.title)
+      if (n.syncStatus !== 'pending' && inPlace) {
+        reserved.add(lower(n.remotePath!))
+        continue
+      }
+      let path = inPlace ? n.remotePath! : ''
+      if (!path) {
+        path = notePathForTitle(folder, n.title, (p) => reserved.has(p) || (takenFiles.has(p) && p !== lower(n.remotePath ?? '')))
+      }
+      reserved.add(lower(path))
+      const text = serializeNote(n)
+      const sha = await gitBlobSha(utf8Bytes(text))
+      if (remote.get(path) !== sha) changes.push({ path, content: text })
+      if (n.remotePath && n.remotePath !== path) del(n.remotePath)
+      plannedNotes.push({ item: n, path, sha })
+    }
+
+    // 4. Imágenes.
+    const plannedAssets: Planned<(typeof assets)[number]>[] = []
+    for (const a of assets) {
+      const bytes = new Uint8Array(await a.blob.arrayBuffer())
+      const sha = await gitBlobSha(bytes)
+      if (remote.get(a.path) !== sha) changes.push({ path: a.path, blobSha: await this.gh.createBlob(bytesToBase64(bytes)) })
+      plannedAssets.push({ item: a, path: a.path, sha })
+    }
+
+    // Un archivo que se escribe no se borra (p. ej. intercambio de nombres).
+    const written = new Set(changes.map((c) => c.path))
+    for (const d of deletes) if (!written.has(d)) changes.push({ path: d, delete: true })
+
+    let newHead = head
+    if (changes.length) {
+      newHead = await this.gh.commit(head, changes, commitMessage(plannedNotes, plannedContainers, deletes.size))
+    }
+
+    // 5. Estado local (solo si nadie editó mientras tanto).
+    await this.db.transaction('rw', [this.db.notes, this.db.containers, this.db.assets], async () => {
+      for (const { item, path, sha } of plannedNotes) {
+        const cur = await this.db.notes.get(item.id)
+        if (!cur || cur.rev !== item.rev) {
+          if (cur && sha) await this.db.notes.update(item.id, { remotePath: path, remoteSha: sha })
+          continue
+        }
+        if (item.syncStatus === 'deleted') {
+          await this.db.notes.delete(item.id)
           report.deletedRemote++
         } else {
-          await this.pushUpsert(note, taken)
+          await this.db.notes.update(item.id, { remotePath: path, remoteSha: sha, syncStatus: 'synced' })
           report.pushed++
         }
-      } catch (err) {
-        this.handleItemError(err, report, label(note))
       }
-    }
+      for (const { item, path, sha } of plannedContainers) {
+        const cur = await this.db.containers.get(item.id)
+        if (!cur) continue
+        if (cur.rev !== item.rev) {
+          if (sha) await this.db.containers.update(item.id, { remotePath: path, remoteSha: sha })
+          continue
+        }
+        if (item.syncStatus === 'deleted') await this.db.containers.delete(item.id)
+        else await this.db.containers.update(item.id, { remotePath: path, remoteSha: sha, syncStatus: 'synced' })
+      }
+      for (const { item, sha } of plannedAssets) {
+        await this.db.assets.update(item.path, { syncStatus: 'synced', remoteSha: sha })
+        report.assetsPushed++
+      }
+    })
+    return newHead
   }
 
-  private async pushUpsert(note: Note, taken: Set<string>, retry = true): Promise<void> {
-    const current = note.remotePath
-    const pick = () => notePathForTitle(note.title, (p) => taken.has(p) && p !== (current && lower(current)))
-    let path = current && pathMatchesTitle(current, note.title) ? current : pick()
+  // ------------------------------------------------------------------ pull
 
-    // GET previo del SHA remoto. Si la ruta nueva existe y no es nuestra, es de otra nota: buscar otra.
-    let remoteSha = await this.gh.getFileSha(path)
-    while (path !== current && remoteSha) {
-      taken.add(lower(path))
-      path = pick()
-      remoteSha = await this.gh.getFileSha(path)
-    }
+  private async pull(remote: Map<string, string>, report: SyncReport) {
+    // Contenedores: primero sus metadatos, luego carpetas sin metadatos (creadas a mano en GitHub).
+    const containers = await this.db.containers.toArray()
+    const byFolder = new Map(containers.filter((c) => c.remotePath).map((c) => [c.remotePath!, c]))
+    const byId = new Map(containers.map((c) => [c.id, c]))
+    const folderToId = new Map<string, string>()
+    for (const c of containers) if (c.remotePath && c.syncStatus !== 'deleted') folderToId.set(c.remotePath, c.id)
 
-    const bytes = utf8Bytes(serializeNote(note))
-    const localSha = await gitBlobSha(bytes)
-    const renamed = current !== null && current !== path
-    let newSha: string
-    if (remoteSha === localSha) {
-      newSha = remoteSha
-    } else {
-      const message = renamed
-        ? `rename: ${current!.slice(NOTES_DIR.length + 1, -3)} → ${label(note)}`
-        : `${remoteSha ? 'update' : 'create'}: ${label(note)}`
+    const metas = [...remote].filter(([p]) => parseMetaPath(p))
+    for (const [path, sha] of metas) {
+      const { folder, kind } = parseMetaPath(path)!
+      const info = classifyFolder(folder)
+      if (info.type !== 'container' || info.kind !== kind) continue
+      const local = byFolder.get(folder)
+      if (local && (local.syncStatus !== 'synced' || local.remoteSha === sha)) {
+        folderToId.set(folder, local.id)
+        continue
+      }
       try {
-        newSha = await this.gh.putFile(path, bytesToBase64(bytes), message, remoteSha ?? undefined)
+        const parsed = parseContainer(base64ToUtf8(await this.gh.getBlob(sha)), info.name)
+        const target = local ?? byId.get(parsed.id)
+        if (target && target.syncStatus !== 'synced') {
+          folderToId.set(folder, target.id)
+          continue
+        }
+        const { hasId, ...fields } = parsed
+        const id = target?.id ?? fields.id
+        await this.db.containers.put({
+          ...fields,
+          id,
+          kind,
+          status: info.archived ? 'archived' : 'active',
+          syncStatus: hasId ? 'synced' : 'pending',
+          remotePath: folder,
+          remoteSha: sha,
+          rev: (target?.rev ?? 0) + 1,
+        })
+        folderToId.set(folder, id)
       } catch (err) {
-        // 409/422: el SHA cambió entre el GET y el PUT → reintentar una vez con SHA fresco (LWW).
-        if (retry && isStatus(err, 409, 422)) return this.pushUpsert(note, taken, false)
-        throw err
+        this.handleItemError(err, report, path)
       }
     }
-    taken.add(lower(path))
 
-    if (renamed) {
-      const oldSha = await this.gh.getFileSha(current!)
-      if (oldSha) {
-        try {
-          await this.gh.deleteFile(current!, oldSha, `rename: borrar ${current}`)
-        } catch (err) {
-          if (!isStatus(err, 404)) throw err
-        }
-      }
-      taken.delete(lower(current!))
-    }
-
-    await this.db.transaction('rw', this.db.notes, async () => {
-      const cur = await this.db.notes.get(note.id)
-      if (!cur) return
-      // Si el usuario editó durante la subida, sigue pendiente pero con la ruta/SHA remotos al día.
-      const unchanged = cur.rev === note.rev
-      await this.db.notes.update(note.id, {
-        remotePath: path,
-        remoteSha: newSha,
-        ...(unchanged ? { syncStatus: 'synced' as const } : {}),
+    // Carpetas de contenedor con notas pero sin metadatos → se crea el contenedor (y se sube su _meta).
+    for (const path of remote.keys()) {
+      if (!isMarkdown(path) || parseMetaPath(path)) continue
+      const folder = dirname(path)
+      const info = classifyFolder(folder)
+      if (info.type !== 'container' || folderToId.has(folder)) continue
+      const now = new Date().toISOString()
+      const id = crypto.randomUUID()
+      await this.db.containers.add({
+        id,
+        kind: info.kind,
+        name: info.name,
+        status: info.archived ? 'archived' : 'active',
+        deadline: null,
+        description: '',
+        createdAt: now,
+        updatedAt: now,
+        syncStatus: 'pending',
+        remotePath: folder,
+        remoteSha: null,
+        rev: 1,
       })
-    })
-  }
-
-  private async pushDelete(note: Note, taken: Set<string>): Promise<void> {
-    if (note.remotePath) {
-      const remoteSha = await this.gh.getFileSha(note.remotePath)
-      if (remoteSha) {
-        try {
-          await this.gh.deleteFile(note.remotePath, remoteSha, `delete: ${label(note)}`)
-        } catch (err) {
-          if (!isStatus(err, 404)) throw err
-        }
-      }
-      taken.delete(lower(note.remotePath))
+      folderToId.set(folder, id)
     }
-    await this.db.transaction('rw', this.db.notes, async () => {
-      const cur = await this.db.notes.get(note.id)
-      if (cur && cur.rev === note.rev) await this.db.notes.delete(note.id)
-    })
-  }
 
-  private async pull(report: SyncReport) {
-    const remote = new Map<string, string>()
-    for (const e of await this.gh.getTree()) if (e.type === 'blob' && isNotePath(e.path)) remote.set(e.path, e.sha)
-
+    // Notas.
     const locals = await this.db.notes.toArray()
-    const byPath = new Map(locals.filter((n) => n.remotePath).map((n) => [n.remotePath!, n]))
-    const byId = new Map(locals.map((n) => [n.id, n]))
+    const notesByPath = new Map(locals.filter((n) => n.remotePath).map((n) => [n.remotePath!, n]))
+    const notesById = new Map(locals.map((n) => [n.id, n]))
 
     for (const [path, sha] of remote) {
-      const atPath = byPath.get(path)
+      if (!isMarkdown(path) || parseMetaPath(path) || !path.includes('/')) continue
+      const folder = dirname(path)
+      const info = classifyFolder(folder)
+      const location: Pick<Note, 'bucket' | 'containerId'> =
+        info.type === 'scratch'
+          ? { bucket: 'scratch', containerId: null }
+          : info.type === 'container' && folderToId.has(folder)
+            ? { bucket: 'container', containerId: folderToId.get(folder)! }
+            : { bucket: 'inbox', containerId: null }
+      // Carpetas desconocidas (p. ej. la antigua notes/) → Landing Zone, y se re-sube para moverla.
+      const misplaced = info.type === 'unknown'
+
+      const atPath = notesByPath.get(path)
       if (atPath && (atPath.syncStatus !== 'synced' || atPath.remoteSha === sha)) continue
       try {
         const parsed = parseNote(base64ToUtf8(await this.gh.getBlob(sha)), path)
-        // Emparejar por ruta; si no, por id (renombrado en otro dispositivo)... salvo que ese id
-        // siga teniendo su propio archivo (copia manual con el mismo id → nota nueva).
         let local = atPath
         if (!local) {
-          const sameId = byId.get(parsed.id)
+          const sameId = notesById.get(parsed.id)
           if (sameId && !(sameId.remotePath && sameId.remotePath !== path && remote.has(sameId.remotePath))) local = sameId
           else if (sameId) parsed.id = crypto.randomUUID()
         }
@@ -197,15 +297,17 @@ export class SyncEngine {
         const id = local?.id ?? fields.id
         const applied = await this.db.transaction('rw', this.db.notes, async () => {
           const cur = await this.db.notes.get(id)
-          // Se editó localmente mientras descargábamos: gana lo local.
           if (cur && (cur.syncStatus !== 'synced' || cur.rev !== local?.rev)) return false
           await this.db.notes.put({
             ...fields,
+            ...location,
             id,
+            due: fields.due ?? null,
+            remind: fields.remind ?? null,
+            done: fields.done ?? false,
             remotePath: path,
             remoteSha: sha,
-            // Archivos sin id en el frontmatter: se re-suben para fijarlo.
-            syncStatus: hasId ? 'synced' : 'pending',
+            syncStatus: hasId && !misplaced ? 'synced' : 'pending',
             rev: (cur?.rev ?? 0) + 1,
           })
           return true
@@ -216,7 +318,7 @@ export class SyncEngine {
       }
     }
 
-    // Notas sincronizadas cuyo archivo ya no existe en remoto → se borraron desde otro dispositivo.
+    // Borrados remotos: notas y contenedores sincronizados cuyo archivo ya no existe.
     const synced = await this.db.notes.where('syncStatus').equals('synced').toArray()
     for (const note of synced) {
       if (!note.remotePath || remote.has(note.remotePath)) continue
@@ -228,6 +330,12 @@ export class SyncEngine {
         }
       })
     }
+    const remoteFolders = new Set([...remote.keys()].map(dirname))
+    for (const c of await this.db.containers.where('syncStatus').equals('synced').toArray()) {
+      if (!c.remotePath || remoteFolders.has(c.remotePath)) continue
+      const hasNotes = (await this.db.notes.where('containerId').equals(c.id).count()) > 0
+      if (!hasNotes) await this.db.containers.delete(c.id)
+    }
   }
 
   /** Los errores por elemento no abortan el ciclo, salvo 401 (hay que parar y pedir login). */
@@ -235,4 +343,28 @@ export class SyncEngine {
     if (err instanceof Error && err.name === 'UnauthorizedError') throw err
     report.errors.push(`${item}: ${err instanceof Error ? err.message : String(err)}`)
   }
+}
+
+function pathMatchesFolder(folder: string, base: string): boolean {
+  if (lower(folder) === lower(base)) return true
+  const suffix = folder.slice(base.length)
+  return lower(folder.slice(0, base.length)) === lower(base) && /^ \(\d+\)$/.test(suffix)
+}
+
+function commitMessage(notes: Planned<Note>[], containers: Planned<Container>[], deletes: number): string {
+  const label = (n: Note) => fileNameFromTitle(n.title)
+  const live = notes.filter((n) => n.item.syncStatus !== 'deleted')
+  const removed = notes.length - live.length
+  if (notes.length === 1 && !containers.length) {
+    const n = notes[0].item
+    if (n.syncStatus === 'deleted') return `delete: ${label(n)}`
+    if (!n.remotePath) return `create: ${label(n)}`
+    return n.remotePath !== notes[0].path ? `move: ${label(n)} → ${notes[0].path}` : `update: ${label(n)}`
+  }
+  const parts = []
+  if (live.length) parts.push(`${live.length} ${live.length === 1 ? 'nota' : 'notas'}`)
+  if (removed) parts.push(`${removed} ${removed === 1 ? 'borrada' : 'borradas'}`)
+  if (containers.length) parts.push(`${containers.length} ${containers.length === 1 ? 'contenedor' : 'contenedores'}`)
+  if (!parts.length && deletes) parts.push(`${deletes} archivos borrados`)
+  return `sync: ${parts.join(', ') || 'imágenes'}`
 }

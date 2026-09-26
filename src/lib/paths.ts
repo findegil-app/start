@@ -1,4 +1,3 @@
-export const NOTES_DIR = 'notes'
 export const ASSETS_DIR = 'assets'
 export const UNTITLED = 'Sin título'
 
@@ -18,25 +17,36 @@ export function fileNameFromTitle(title: string): string {
   return name || UNTITLED
 }
 
-/** notes/<Título>.md, o notes/<Título> (n).md si la ruta está ocupada (comparación sin mayúsculas). */
-export function notePathForTitle(title: string, isTaken: (lowerPath: string) => boolean): string {
+/** <carpeta>/<Título>.md, o <carpeta>/<Título> (n).md si está ocupada (comparación sin mayúsculas). */
+export function notePathForTitle(folder: string, title: string, isTaken: (lowerPath: string) => boolean): string {
   const base = fileNameFromTitle(title)
   for (let n = 1; ; n++) {
-    const path = `${NOTES_DIR}/${n === 1 ? base : `${base} (${n})`}.md`
+    const path = `${folder}/${n === 1 ? base : `${base} (${n})`}.md`
     if (!isTaken(path.toLowerCase())) return path
   }
 }
 
-const NOTE_PATH_RE = /^notes\/.+\.md$/i
-export const isNotePath = (path: string) => NOTE_PATH_RE.test(path)
+/** Nombre único (con sufijo " (n)") para una carpeta de contenedor. */
+export function uniqueFolder(base: string, isTaken: (lowerFolder: string) => boolean): string {
+  for (let n = 1; ; n++) {
+    const folder = n === 1 ? base : `${base} (${n})`
+    if (!isTaken(folder.toLowerCase())) return folder
+  }
+}
+
+/** ¿La ruta sigue correspondiendo al título dentro de esa carpeta? (acepta el sufijo " (n)") */
+export function pathMatchesTitle(path: string, folder: string, title: string): boolean {
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^${esc(folder)}/${esc(fileNameFromTitle(title))}(?: \\(\\d+\\))?\\.md$`, 'i').test(path)
+}
 
 /** Nombre sin carpeta ni extensión: se usa como título si el archivo no tiene frontmatter. */
 export function titleFromPath(path: string): string {
   return path.replace(/^.*\//, '').replace(/\.md$/i, '')
 }
 
-/** Referencia usada dentro del Markdown (relativa a notes/, así también se ve bien en GitHub). */
-export const assetRef = (assetPath: string) => `../${assetPath}`
+/** Referencia usada dentro del Markdown: relativa a la raíz del repo, así no cambia al mover la nota y GitHub la resuelve. */
+export const assetRef = (assetPath: string) => `/${assetPath}`
 
 /** Convierte un src de imagen del Markdown en ruta de asset del repo, o null si es externo. */
 export function assetPathFromSrc(src: string | null | undefined): string | null {

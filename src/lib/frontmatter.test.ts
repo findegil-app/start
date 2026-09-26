@@ -21,7 +21,7 @@ describe('frontmatter', () => {
 
   it('round-trip preserva campos y claves desconocidas', () => {
     const withExtra = { ...note, extra: { pinned: true, source: 'web' } }
-    expect(parseNote(serializeNote(withExtra), 'notes/x.md')).toEqual({ ...withExtra, hasId: true })
+    expect(parseNote(serializeNote(withExtra), 'notes/x.md')).toEqual({ ...withExtra, hasId: true, due: null, remind: null, done: false })
   })
 
   it('tolera archivos sin frontmatter (creados a mano en el repo)', () => {
@@ -45,6 +45,22 @@ describe('rutas por título', () => {
     expect(fileNameFromTitle('  Reunión: Q3/Q4 ¿plan?  ')).toBe('Reunión Q3 Q4 ¿plan')
     expect(fileNameFromTitle('   ')).toBe('Sin título')
     const taken = new Set(['notes/idea.md', 'notes/idea (2).md'])
-    expect(notePathForTitle('Idea', (p) => taken.has(p))).toBe('notes/Idea (3).md')
+    expect(notePathForTitle('notes', 'Idea', (p) => taken.has(p))).toBe('notes/Idea (3).md')
+  })
+})
+
+describe('contenedores y tiempos', () => {
+  it('round-trip de _project.md', async () => {
+    const { parseContainer, serializeContainer } = await import('./frontmatter')
+    const c = { id: 'p1', kind: 'project' as const, status: 'active' as const, name: 'Web', deadline: '2026-10-15', description: 'Rediseño', createdAt: 'a', updatedAt: 'b' }
+    const text = serializeContainer(c)
+    expect(text).toMatch(/^---\nid: p1\ntype: project\nname: Web\nstatus: active\ndeadline: 2026-10-15\n/)
+    expect(parseContainer(text, 'X')).toEqual({ id: 'p1', hasId: true, name: 'Web', deadline: '2026-10-15', description: 'Rediseño', createdAt: 'a', updatedAt: 'b', extra: undefined })
+  })
+
+  it('due/remind/done solo aparecen si tienen valor', () => {
+    expect(serializeNote(note)).not.toMatch(/due:|remind:|done:/)
+    const md = serializeNote({ ...note, due: '2026-10-01', remind: '2026-09-30T09:00:00Z', done: true })
+    expect(parseNote(md, 'x.md')).toMatchObject({ due: '2026-10-01', remind: '2026-09-30T09:00:00Z', done: true })
   })
 })

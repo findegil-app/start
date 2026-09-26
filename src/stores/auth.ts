@@ -46,11 +46,11 @@ export async function loadAuth() {
 /** Procesa el ID token de Google: solo entran los correos de config/users.ts. Después abre el repo. */
 export async function signInWithGoogle(idToken: string): Promise<void> {
   const claims = decodeIdToken(idToken)
-  if (!validClaims(claims) || !claims.sub) throw new Error('No se pudo verificar la cuenta de Google. Inténtalo de nuevo.')
+  if (!validClaims(claims) || !claims.sub) throw new Error('Could not verify the Google account. Please try again.')
   const email = normEmail(claims.email)
   if (!userConfig(email)) {
     googleSignOut()
-    throw new Error(`La cuenta ${email} no tiene acceso a Findegil.`)
+    throw new Error(`The account ${email} has no access to Findegil.`)
   }
 
   // Si cambia el usuario del dispositivo, los datos locales son de otro repo: se descartan.
@@ -73,12 +73,12 @@ export async function signInWithGoogle(idToken: string): Promise<void> {
 export async function unlockRepo(): Promise<void> {
   const s = session.value
   const cfg = userConfig(s?.email)
-  if (!s || !cfg) throw new Error('Sesión no válida.')
+  if (!s || !cfg) throw new Error('Invalid session.')
 
   const sealed = __FINDEGIL_VAULT__[s.email]
-  if (!sealed) throw new UnlockError('missing', 'Esta versión de la app no incluye el acceso a tus notas.')
+  if (!sealed) throw new UnlockError('missing', 'This build of the app does not include access to your notes.')
   const token = await openToken(sealed, s.sub, s.email)
-  if (!token) throw new UnlockError('mismatch', 'El acceso incluido en la app no corresponde a esta cuenta de Google.')
+  if (!token) throw new UnlockError('mismatch', 'The access bundled in the app does not match this Google account.')
 
   // Octokit se carga bajo demanda para no engordar el arranque de la app.
   const { fetchRepoInfo, UnauthorizedError } = await import('../github/client')
@@ -87,12 +87,12 @@ export async function unlockRepo(): Promise<void> {
     info = await fetchRepoInfo(token, cfg.owner, cfg.repo)
   } catch (err) {
     if (err instanceof UnauthorizedError) {
-      throw new UnlockError('expired', 'El token de acceso a GitHub ha caducado o fue revocado.')
+      throw new UnlockError('expired', 'The GitHub access token has expired or was revoked.')
     }
-    throw new UnlockError('no-access', 'No se pudo acceder al repositorio de notas. ¿Hay conexión?')
+    throw new UnlockError('no-access', 'Could not reach the notes repository. Are you online?')
   }
-  if (!info.canPush) throw new UnlockError('no-access', 'El token no tiene permisos de escritura (Contents: Read and write).')
-  if (!info.isPrivate) throw new UnlockError('no-access', 'El repositorio de notas debe ser privado.')
+  if (!info.canPush) throw new UnlockError('no-access', 'The token has no write permission (Contents: Read and write).')
+  if (!info.isPrivate) throw new UnlockError('no-access', 'The notes repository must be private.')
 
   const creds: Credentials = { token, owner: cfg.owner, repo: cfg.repo, branch: info.defaultBranch }
   await setKV('credentials', creds)

@@ -46,7 +46,7 @@ async function insertImages(files: File[], pos?: number) {
       if (pos !== undefined) chain.insertContentAt(pos, { type: 'image', attrs: { src, alt: file.name } }).run()
       else chain.setImage({ src, alt: file.name }).run()
     } catch (err) {
-      alert(`No se pudo añadir la imagen: ${err instanceof Error ? err.message : err}`)
+      alert(`Could not add the image: ${err instanceof Error ? err.message : err}`)
     } finally {
       imageBusy.value--
     }
@@ -64,7 +64,7 @@ const editor = useEditor({
     AssetImage,
     TaskList,
     TaskItem.configure({ nested: true }),
-    Placeholder.configure({ placeholder: 'Escribe algo…' }),
+    Placeholder.configure({ placeholder: 'Write something…' }),
   ],
   editorProps: {
     attributes: { class: 'prose', spellcheck: 'true' },
