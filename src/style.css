@@ -11,6 +11,7 @@
   --warn: #c98a1b;
   --danger: #b3261e;
   --radius: 10px;
+  --font-brand: 'Marcellus', Georgia, serif;
   --sidebar: 320px;
   color-scheme: light;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -90,9 +91,9 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
   border-radius: 16px;
   padding: 2rem 1.5rem;
 }
-.login-card h1 { margin: 0; text-align: center; }
+.login-card h1 { margin: 0; text-align: center; font-family: var(--font-brand); font-weight: 400; font-size: 2.4rem; letter-spacing: 0.03em; }
 .login-card > p { margin: 0; text-align: center; }
-.login-logo { align-self: center; border-radius: 14px; }
+.login-logo { align-self: center; }
 .login-card label, .token-step label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; font-weight: 600; }
 .login-card .help { font-size: 0.875rem; color: var(--muted); }
 .login-card .help summary { cursor: pointer; }
@@ -114,7 +115,7 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
   padding-top: env(safe-area-inset-top);
 }
 .sidebar-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 0.75rem 0.25rem 1rem; }
-.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 1.1rem; }
+.brand { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-brand); font-weight: 400; font-size: 1.35rem; letter-spacing: 0.03em; }
 .brand img { border-radius: 6px; }
 .sidebar-tools { display: flex; gap: 0.5rem; padding: 0.5rem 0.75rem; }
 .sidebar-tools input { flex: 1; min-width: 0; }

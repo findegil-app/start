@@ -69,7 +69,7 @@ npm install
 npm run dev        # http://localhost:5173/start/
 npm test           # tests unitarios (frontmatter + motor de sync con GitHub simulado)
 npm run build      # typecheck + build de producción
-npm run icons      # regenera los iconos PWA desde public/logo.svg
+npm run icons      # regenera los iconos PWA desde public/logo.svg y brand/logo-square.svg
 ```
 
 `BASE_PATH` controla la ruta base (por defecto `/start/`; usa `/` si configuras un dominio propio).

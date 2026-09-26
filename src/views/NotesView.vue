@@ -37,7 +37,7 @@ async function signOut() {
     <aside class="sidebar">
       <header class="sidebar-header">
         <div class="brand">
-          <img :src="logo" alt="" width="24" height="24" />
+          <img :src="logo" alt="" width="28" height="28" />
           <span>Findegil</span>
         </div>
         <button type="button" class="icon-btn" title="Cerrar sesión" aria-label="Cerrar sesión" @click="signOut">⎋</button>

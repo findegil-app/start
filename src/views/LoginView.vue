@@ -65,7 +65,7 @@ watch(session, (s) => !s && setTimeout(mountGoogle))
 <template>
   <main class="login">
     <div class="login-card">
-      <img :src="logo" alt="" class="login-logo" width="64" height="64" />
+      <img :src="logo" alt="" class="login-logo" width="88" height="88" />
       <h1>Findegil</h1>
 
       <template v-if="!session">
