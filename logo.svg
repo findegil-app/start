@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#9f1d20"/>
-  <path d="M136 132c0-11 9-20 20-20h92c14 0 26 7 34 18v266c-9-10-22-16-36-16h-90c-11 0-20-9-20-20z" fill="#f7efe2"/>
-  <path d="M376 132c0-11-9-20-20-20h-54c-11 0-20 9-20 20v248c9-10 22-16 36-16h38c11 0 20-9 20-20z" fill="#eadcc5"/>
-  <path d="M176 176h72M176 216h72M176 256h52" stroke="#9f1d20" stroke-width="14" stroke-linecap="round"/>
-  <path d="M318 112h40v120l-20-16-20 16z" fill="#d9a441"/>
+  <title>Findegil</title>
+  <!-- Pluma-F: el vexilo partido forma los brazos de la F y el cálamo es el asta. Sello real en oro. -->
+  <rect width="512" height="512" rx="112" fill="#14182b"/>
+  <circle cx="256" cy="256" r="200" fill="none" stroke="#c9a45c" stroke-width="7"/><circle cx="256" cy="256" r="186" fill="none" stroke="#c9a45c" stroke-width="1.5" opacity=".55"/>
+  <g transform="translate(-52 6)"><path d="M250 84 C296 66 370 60 410 72 C386 104 346 142 298 168 L246 194 L352 186 C324 222 282 258 238 286 L234 284 C212 236 210 150 250 84 Z" fill="#e3c27a"/><path d="M249 96 Q243 190 235 280" fill="none" stroke="#14182b" stroke-width="5" stroke-linecap="round"/><path d="M233 272 L243 276 L223 398 L212 436 L209 398 Z" fill="#e3c27a"/><path d="M218 400 L212 426" stroke="#14182b" stroke-width="3" stroke-linecap="round"/></g>
 </svg>
