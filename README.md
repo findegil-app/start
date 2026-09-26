@@ -41,12 +41,24 @@ Las imágenes se referencian como `../assets/<uuid>.webp`, por lo que también s
 ## Autenticación
 
 1. **Google Sign-In** (Google Identity Services, mismo cliente OAuth que `rdr-nfq/team-hub`). Solo entran los correos de `src/config/users.ts`, y cada correo tiene asociado su repositorio de notas (el repo no se muestra ni se elige en la UI).
-2. **Token de GitHub**, una vez por dispositivo: fine-grained PAT con acceso **solo** al repo de notas y **Contents: Read and write**. Se guarda únicamente en IndexedDB.
+2. **Token de GitHub embebido y cifrado** (`src/lib/vault.ts`). En el build, `vite.config.ts` cifra `NOTES_TOKEN` con AES-256-GCM usando una clave PBKDF2 derivada del id interno de la cuenta de Google (`NOTES_GOOGLE_SUB`) y el email. Al entrar con Google, la app recibe ese id, descifra el token y lo guarda en IndexedDB. Nunca hay que pegarlo.
 
-> La comprobación de Google es solo del lado del cliente (no hay backend que verifique la firma del ID token). La protección real de los datos es el token de GitHub, que nunca está en el código.
+> Seguridad: el token cifrado viaja en el JavaScript público; solo se puede abrir con el `sub` de la cuenta de Google autorizada, que no está en el código ni en el repo. Aun así, no hay backend: trata el `sub` como un secreto y usa un token con acceso **solo** al repo de notas.
+
+### Secretos de GitHub Actions (findegil-app/start → Settings → Secrets and variables → Actions)
+
+| Secreto | Valor |
+| --- | --- |
+| `NOTES_TOKEN` | Fine-grained PAT con acceso solo a `pablolloce/red-notes`, permiso *Contents: Read and write* |
+| `NOTES_GOOGLE_SUB` | Id de tu cuenta de Google. Si falta o no coincide, la app lo muestra tras iniciar sesión con un botón *Copiar* |
+
+Tras crear/cambiar un secreto, relanza el workflow *Deploy to GitHub Pages*. Para rotar el token: nuevo PAT → actualizar `NOTES_TOKEN` → relanzar el deploy (si el antiguo se revoca, la app avisa de que ha caducado).
+
+En local: crea `.env.local` (ignorado por git) con `NOTES_TOKEN=…` y `NOTES_GOOGLE_SUB=…`.
 
 ## Puesta en marcha
 
+1. **Secretos** `NOTES_TOKEN` y `NOTES_GOOGLE_SUB` (ver arriba).
 1. **Google Cloud**: en el cliente OAuth `535974839401-…` añade a *Orígenes de JavaScript autorizados*: `https://findegil-app.github.io`, `http://localhost:5173` y `http://localhost:4173`.
 2. **GitHub Pages**: tras el primer push a `main`, la action `Deploy to GitHub Pages` crea la rama `gh-pages`. En *Settings → Pages* elige *Deploy from a branch* → `gh-pages` / `/ (root)`. La app quedará en `https://<owner>.github.io/start/`.
 

@@ -1,68 +1,65 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { userConfig } from '../config/users'
 import { renderGoogleButton } from '../lib/google'
-import { credentials, session, setGitHubToken, signInWithGoogle, signOut } from '../stores/auth'
+import { credentials, session, signInWithGoogle, signOut, unlockRepo, UnlockError, type UnlockErrorCode } from '../stores/auth'
 
 const router = useRouter()
 const logo = `${import.meta.env.BASE_URL}logo.svg`
 const googleBtn = ref<HTMLElement>()
-const token = ref('')
 const error = ref('')
+const errorCode = ref<UnlockErrorCode | null>(null)
 const busy = ref(false)
+const copied = ref(false)
 
 async function goHome() {
   if (session.value && credentials.value) await router.replace({ name: 'home' })
 }
 
-async function onGoogle(idToken: string) {
+async function run(action: () => Promise<void>) {
   error.value = ''
+  errorCode.value = null
+  busy.value = true
   try {
-    await signInWithGoogle(idToken)
+    await action()
     await goHome()
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
+    errorCode.value = err instanceof UnlockError ? err.code : null
+  } finally {
+    busy.value = false
   }
 }
 
 async function mountGoogle() {
   if (session.value || !googleBtn.value) return
   try {
-    await renderGoogleButton(googleBtn.value, onGoogle)
+    await renderGoogleButton(googleBtn.value, (idToken) => run(() => signInWithGoogle(idToken)))
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err)
   }
 }
 
-async function submitToken() {
-  error.value = ''
-  busy.value = true
-  try {
-    await setGitHubToken(token.value)
-    token.value = ''
-    await goHome()
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : String(err)
-  } finally {
-    busy.value = false
-  }
+async function copySub() {
+  if (!session.value) return
+  await navigator.clipboard.writeText(session.value.sub)
+  copied.value = true
+  setTimeout(() => (copied.value = false), 2000)
 }
 
 async function switchAccount() {
   await signOut()
   error.value = ''
+  errorCode.value = null
 }
 
-onMounted(mountGoogle)
+onMounted(() => {
+  // Sesión de Google ya cacheada pero sin acceso al repo (401, primer arranque offline…): reintentar.
+  if (session.value) void run(unlockRepo)
+  else void mountGoogle()
+})
 // Tras cerrar sesión el botón de Google vuelve a montarse.
 watch(session, (s) => !s && setTimeout(mountGoogle))
-
-const tokenUrl = 'https://github.com/settings/personal-access-tokens/new?name=Findegil&contents=write'
-const repoName = () => {
-  const cfg = userConfig(session.value?.email)
-  return cfg ? `${cfg.owner}/${cfg.repo}` : ''
-}
 </script>
 
 <template>
@@ -76,29 +73,33 @@ const repoName = () => {
         <div ref="googleBtn" class="google-btn" />
       </template>
 
-      <form v-else class="token-step" @submit.prevent="submitToken">
+      <div v-else class="token-step">
         <p class="muted">
-          Hola, <strong>{{ session.name ?? session.email }}</strong>. Primera vez en este dispositivo: conecta tu
-          almacenamiento de notas.
+          Hola, <strong>{{ session.name ?? session.email }}</strong>.
+          <template v-if="busy">Conectando con tus notas…</template>
         </p>
-        <label>
-          Token de GitHub
-          <input v-model="token" type="password" autocomplete="off" spellcheck="false" required placeholder="github_pat_…" />
-        </label>
-        <details class="help">
-          <summary>¿Cómo creo el token?</summary>
-          <ol>
-            <li>Abre <a :href="tokenUrl" target="_blank" rel="noopener">GitHub → Fine-grained tokens</a>.</li>
-            <li><em>Repository access</em>: <strong>Only select repositories</strong> → <code>{{ repoName() }}</code>.</li>
-            <li><em>Permissions → Contents</em>: <strong>Read and write</strong>.</li>
-          </ol>
-          <p>Se guarda solo en este dispositivo y solo se envía a api.github.com.</p>
-        </details>
-        <button class="primary" type="submit" :disabled="busy">{{ busy ? 'Verificando…' : 'Conectar' }}</button>
-        <button type="button" class="link-btn" @click="switchAccount">Usar otra cuenta</button>
-      </form>
 
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
+        <template v-if="errorCode === 'missing' || errorCode === 'mismatch'">
+          <p class="error" role="alert">{{ error }}</p>
+          <div class="help">
+            <p>Para configurarlo, añade este ID como secreto <code>NOTES_GOOGLE_SUB</code> en GitHub Actions y relanza el despliegue:</p>
+            <div class="sub-box">
+              <code>{{ session.sub }}</code>
+              <button type="button" class="link-btn" @click="copySub">{{ copied ? 'Copiado' : 'Copiar' }}</button>
+            </div>
+          </div>
+        </template>
+        <template v-else-if="errorCode === 'expired'">
+          <p class="error" role="alert">{{ error }}</p>
+          <p class="help">Crea un token nuevo, actualiza el secreto <code>NOTES_TOKEN</code> y relanza el despliegue.</p>
+        </template>
+        <p v-else-if="error" class="error" role="alert">{{ error }}</p>
+
+        <button v-if="error" class="primary" type="button" :disabled="busy" @click="run(unlockRepo)">Reintentar</button>
+        <button type="button" class="link-btn" @click="switchAccount">Usar otra cuenta</button>
+      </div>
+
+      <p v-if="error && !session" class="error" role="alert">{{ error }}</p>
     </div>
   </main>
 </template>

@@ -27,6 +27,9 @@ jobs:
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          # Token de GitHub de las notas: se cifra dentro del bundle con la cuenta de Google (ver src/lib/vault.ts).
+          NOTES_TOKEN: ${{ secrets.NOTES_TOKEN }}
+          NOTES_GOOGLE_SUB: ${{ secrets.NOTES_GOOGLE_SUB }}
       - name: Deploy dist → gh-pages
         if: github.event_name != 'pull_request'
         uses: peaceiris/actions-gh-pages@v4

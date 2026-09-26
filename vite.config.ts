@@ -1,12 +1,34 @@
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type UserConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import { sealToken, type Vault } from './src/lib/vault.ts'
 
 // GitHub Pages sirve el proyecto en https://<owner>.github.io/<repo>/
 const base = process.env.BASE_PATH ?? '/start/'
 
-export default defineConfig({
+/**
+ * Cifra el token de GitHub para el bundle. Nunca se escribe en el repo: llega por variables de entorno
+ * (secretos de GitHub Actions en CI, o .env.local en desarrollo):
+ *   NOTES_TOKEN       fine-grained PAT con Contents R/W sobre el repo de notas
+ *   NOTES_GOOGLE_SUB  id interno de la cuenta de Google (la app lo muestra si falta)
+ *   NOTES_EMAIL       cuenta a la que pertenece (por defecto pablo.llorente@nfq.es)
+ */
+async function buildVault(env: Record<string, string>): Promise<Vault> {
+  const token = env.NOTES_TOKEN?.trim()
+  const sub = env.NOTES_GOOGLE_SUB?.trim()
+  const email = (env.NOTES_EMAIL || 'pablo.llorente@nfq.es').trim().toLowerCase()
+  if (!token || !sub) {
+    console.warn('[findegil] NOTES_TOKEN / NOTES_GOOGLE_SUB no definidos: el build no incluye acceso a las notas')
+    return {}
+  }
+  return { [email]: await sealToken(token, sub, email) }
+}
+
+export default defineConfig(async ({ mode }): Promise<UserConfig> => ({
   base,
+  define: {
+    __FINDEGIL_VAULT__: JSON.stringify(await buildVault(loadEnv(mode, process.cwd(), ''))),
+  },
   build: { target: 'es2022' },
   worker: { format: 'es' },
   plugins: [
@@ -42,4 +64,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+}))

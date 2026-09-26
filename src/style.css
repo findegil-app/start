@@ -284,3 +284,6 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
   .toolbar { overflow-x: auto; flex-wrap: nowrap; }
   .toolbar button { flex: none; }
 }
+.sub-box { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: var(--surface-2); border-radius: var(--radius); padding: 0.5rem 0.75rem; margin-top: 0.5rem; }
+.sub-box code { font-size: 0.9rem; word-break: break-all; }
+.token-step .help { margin: 0; font-size: 0.875rem; color: var(--muted); }

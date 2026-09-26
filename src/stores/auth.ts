@@ -3,11 +3,27 @@ import { userConfig, normEmail } from '../config/users'
 import { db, delKV, getKV, setKV } from '../db'
 import type { Credentials } from '../github/client'
 import { decodeIdToken, googleSignOut, validClaims } from '../lib/google'
+import { openToken } from '../lib/vault'
 
 export interface Session {
   email: string
+  /** Id interno de la cuenta de Google: es la llave del token cifrado del bundle. */
+  sub: string
   name?: string
   picture?: string
+}
+
+export type UnlockErrorCode = 'missing' | 'mismatch' | 'expired' | 'no-access'
+
+/** Fallo al abrir el acceso al repo con el token embebido. */
+export class UnlockError extends Error {
+  readonly code: UnlockErrorCode
+
+  constructor(code: UnlockErrorCode, message: string) {
+    super(message)
+    this.name = 'UnlockError'
+    this.code = code
+  }
 }
 
 /** Identidad (Google). Se cachea en IndexedDB para arrancar offline. */
@@ -18,7 +34,7 @@ export const credentials = ref<Credentials | null>(null)
 export async function loadAuth() {
   const s = await getKV<Session>('session')
   const cfg = userConfig(s?.email)
-  if (!s || !cfg) {
+  if (!s?.sub || !cfg) {
     await Promise.all([delKV('session'), delKV('credentials')])
     return
   }
@@ -27,10 +43,10 @@ export async function loadAuth() {
   credentials.value = c && c.owner === cfg.owner && c.repo === cfg.repo ? c : null
 }
 
-/** Procesa el ID token de Google: solo entran los correos configurados en config/users.ts. */
+/** Procesa el ID token de Google: solo entran los correos de config/users.ts. Después abre el repo. */
 export async function signInWithGoogle(idToken: string): Promise<void> {
   const claims = decodeIdToken(idToken)
-  if (!validClaims(claims)) throw new Error('No se pudo verificar la cuenta de Google. Inténtalo de nuevo.')
+  if (!validClaims(claims) || !claims.sub) throw new Error('No se pudo verificar la cuenta de Google. Inténtalo de nuevo.')
   const email = normEmail(claims.email)
   if (!userConfig(email)) {
     googleSignOut()
@@ -43,29 +59,42 @@ export async function signInWithGoogle(idToken: string): Promise<void> {
     await Promise.all([db.notes.clear(), db.assets.clear(), delKV('lastSyncAt'), delKV('credentials')])
     credentials.value = null
   }
-  const s: Session = { email, name: claims.name, picture: claims.picture }
+  const s: Session = { email, sub: claims.sub, name: claims.name, picture: claims.picture }
   await setKV('session', s)
   await setKV('owner', email)
   session.value = s
+  await unlockRepo()
 }
 
-/** Valida el token de GitHub contra el repo del usuario y lo guarda en este dispositivo. */
-export async function setGitHubToken(token: string): Promise<void> {
-  const cfg = userConfig(session.value?.email)
-  if (!cfg) throw new Error('Sesión no válida.')
+/**
+ * Descifra el token de GitHub embebido en el bundle con la cuenta de Google de la sesión,
+ * lo valida contra el repo del usuario y lo guarda en este dispositivo.
+ */
+export async function unlockRepo(): Promise<void> {
+  const s = session.value
+  const cfg = userConfig(s?.email)
+  if (!s || !cfg) throw new Error('Sesión no válida.')
+
+  const sealed = __FINDEGIL_VAULT__[s.email]
+  if (!sealed) throw new UnlockError('missing', 'Esta versión de la app no incluye el acceso a tus notas.')
+  const token = await openToken(sealed, s.sub, s.email)
+  if (!token) throw new UnlockError('mismatch', 'El acceso incluido en la app no corresponde a esta cuenta de Google.')
+
   // Octokit se carga bajo demanda para no engordar el arranque de la app.
   const { fetchRepoInfo, UnauthorizedError } = await import('../github/client')
   let info
   try {
-    info = await fetchRepoInfo(token.trim(), cfg.owner, cfg.repo)
+    info = await fetchRepoInfo(token, cfg.owner, cfg.repo)
   } catch (err) {
-    if (err instanceof UnauthorizedError) throw new Error('Token inválido o caducado.')
-    throw new Error('El token no tiene acceso al repositorio de notas.')
+    if (err instanceof UnauthorizedError) {
+      throw new UnlockError('expired', 'El token de acceso a GitHub ha caducado o fue revocado.')
+    }
+    throw new UnlockError('no-access', 'No se pudo acceder al repositorio de notas. ¿Hay conexión?')
   }
-  if (!info.canPush) throw new Error('El token no tiene permisos de escritura (Contents: Read and write).')
-  if (!info.isPrivate) throw new Error('El repositorio de notas debe ser privado.')
+  if (!info.canPush) throw new UnlockError('no-access', 'El token no tiene permisos de escritura (Contents: Read and write).')
+  if (!info.isPrivate) throw new UnlockError('no-access', 'El repositorio de notas debe ser privado.')
 
-  const creds: Credentials = { token: token.trim(), owner: cfg.owner, repo: cfg.repo, branch: info.defaultBranch }
+  const creds: Credentials = { token, owner: cfg.owner, repo: cfg.repo, branch: info.defaultBranch }
   await setKV('credentials', creds)
   credentials.value = creds
 }
