@@ -5,7 +5,8 @@ import NoteEditor from '../editor/NoteEditor.vue'
 import { KIND_PLURAL } from '../lib/para'
 import { openMove, useContainers } from '../stores/containers'
 import { deleteWithUndo } from '../composables/useDeleteNote'
-import { updateNote, useNote } from '../stores/notes'
+import { backlinks } from '../stores/noteLinks'
+import { updateNote, useLiveQuery, useNote } from '../stores/notes'
 import DueControls from './DueControls.vue'
 import TagInput from './TagInput.vue'
 
@@ -15,6 +16,10 @@ const route = useRoute()
 const router = useRouter()
 const note = useNote(computed(() => props.noteId))
 const containers = useContainers()
+const linkedFrom = useLiveQuery(
+  () => backlinks(note.value?.title ?? '', props.noteId),
+  () => [note.value?.title, props.noteId],
+)
 
 const title = ref('')
 const tags = ref<string[]>([])
@@ -107,6 +112,12 @@ onBeforeUnmount(flushTitle)
     <DueControls :note="note" />
     <TagInput :model-value="tags" @update:model-value="onTags" />
     <NoteEditor :key="note.id" ref="editorRef" :note-id="note.id" :content="note.content" />
+    <section v-if="linkedFrom?.length" class="backlinks">
+      <h4>Linked from</h4>
+      <RouterLink v-for="b in linkedFrom" :key="b.id" :to="b.route" class="backlink">
+        <span>↗ {{ b.title }}</span><small>{{ b.where }}</small>
+      </RouterLink>
+    </section>
   </article>
   <div v-else-if="note === null" class="placeholder muted">
     <p>This note doesn't exist or was deleted.</p>

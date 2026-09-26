@@ -7,7 +7,8 @@ import { addImage, updateNote } from '../stores/notes'
 import { PICK_IMAGE_EVENT } from './blocks'
 import BubbleToolbar from './BubbleToolbar.vue'
 import EditorToolbar from './EditorToolbar.vue'
-import { contentExtensions } from './extensions'
+import 'katex/dist/katex.min.css'
+import { contentExtensions, mathHost } from './extensions'
 import { SlashCommand } from './extensions/SlashCommand'
 
 const props = defineProps<{ noteId: string; content: string }>()
@@ -114,6 +115,15 @@ function addBlockBelow() {
   })
   if (at === null) return
   ed.chain().insertContentAt(at, { type: 'paragraph' }).focus(at + 1).insertContent('/').run()
+}
+
+mathHost.edit = (kind, latex, pos) => {
+  const next = prompt('Edit formula (LaTeX). Leave empty to delete.', latex)
+  const ed = editor.value
+  if (next === null || !ed) return
+  const chain = ed.chain().focus()
+  if (!next.trim()) (kind === 'inline' ? chain.deleteInlineMath({ pos }) : chain.deleteBlockMath({ pos })).run()
+  else (kind === 'inline' ? chain.updateInlineMath({ latex: next.trim(), pos }) : chain.updateBlockMath({ latex: next.trim(), pos })).run()
 }
 
 const flushOnHide = () => document.visibilityState === 'hidden' && flush()

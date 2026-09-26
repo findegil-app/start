@@ -48,7 +48,19 @@ assets/<uuid>.webp                     # imágenes (referenciadas como /assets/�
 - **/** abre el menú de bloques: texto, títulos, to-do, listas, toggle, cita, callouts (note/tip/warning/important), código con resaltado, tabla, divisor, imagen y fecha.
 - Seleccionar texto muestra el menú flotante (Turn into, negrita, cursiva, tachado, código, resaltado, enlace); dentro de una tabla, acciones de filas/columnas.
 - Tirador de bloque (＋ inserta debajo, ⋮⋮ arrastra para reordenar).
-- Todo se guarda como Markdown legible en GitHub: callouts = alertas `> [!TIP]`, toggles = `<details>`, tablas GFM, resaltado `==texto==`.
+- Además: columnas (2/3), enlaces entre notas `[[Título]]` (con "Linked from" y renombrado en cascada), color de texto, vídeos/webs incrustados y fórmulas LaTeX (KaTeX).
+- Todo se guarda como Markdown legible en GitHub:
+
+| Bloque | Markdown |
+| --- | --- |
+| Callout | `> [!TIP]` (alerta de GitHub) |
+| Toggle | `<details><summary>…</summary>…</details>` |
+| Tabla | GFM |
+| Resaltado / color | `==texto==` / `<span data-color="red">texto</span>` |
+| Columnas | `<!-- columns -->` … `<!-- column -->` … `<!-- /columns -->` |
+| Enlace a nota | `[[Título]]` (compatible con Obsidian) |
+| Incrustado | `@[embed](https://…)` |
+| Fórmula | `$x^2$` y bloque `$$ … $$` |
 
 ## Autenticación
 

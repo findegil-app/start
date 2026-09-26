@@ -55,6 +55,48 @@ export const BLOCKS: BlockItem[] = [
       e.view.dom.dispatchEvent(new CustomEvent(PICK_IMAGE_EVENT, { bubbles: true }))
     },
   },
+  { title: '2 columns', hint: 'Side-by-side blocks', icon: '▥', keywords: 'columns two layout side', run: (e, r) => chain(e, r).insertColumns(2).run() },
+  { title: '3 columns', hint: 'Three side-by-side blocks', icon: '▥', keywords: 'columns three layout', run: (e, r) => chain(e, r).insertColumns(3).run() },
+  {
+    title: 'Link to note',
+    hint: 'Connect with another note — or type [[',
+    icon: '↗',
+    keywords: 'link note page mention wiki backlink',
+    run: (e, r) => chain(e, r).insertContent('[[').run(),
+  },
+  {
+    title: 'Embed',
+    hint: 'Video (YouTube, Vimeo…) or web page',
+    icon: '▶',
+    keywords: 'embed video youtube vimeo iframe web website loom spotify figma',
+    run: (e, r) => {
+      const url = prompt('Paste a link (YouTube, Vimeo, Loom, Spotify, Figma or any web page)')?.trim()
+      if (!url) return void chain(e, r).run()
+      chain(e, r).setEmbed(/^https?:\/\//.test(url) ? url : `https://${url}`).run()
+    },
+  },
+  {
+    title: 'Equation',
+    hint: 'Block formula (LaTeX)',
+    icon: '∑',
+    keywords: 'math equation formula latex katex block',
+    run: (e, r) => {
+      const latex = prompt('LaTeX formula', 'E = mc^2')?.trim()
+      if (!latex) return void chain(e, r).run()
+      chain(e, r).insertContent({ type: 'blockMath', attrs: { latex } }).run()
+    },
+  },
+  {
+    title: 'Inline formula',
+    hint: 'Formula inside text — or type $$…$$',
+    icon: '√',
+    keywords: 'math inline formula latex katex',
+    run: (e, r) => {
+      const latex = prompt('LaTeX formula', 'x^2')?.trim()
+      if (!latex) return void chain(e, r).run()
+      chain(e, r).insertContent([{ type: 'inlineMath', attrs: { latex } }, { type: 'text', text: ' ' }]).run()
+    },
+  },
   {
     title: 'Date',
     hint: "Insert today's date",
@@ -68,8 +110,13 @@ export const BLOCKS: BlockItem[] = [
 ]
 
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+/** Filtra por título o palabras clave; ignora espacios ("2col" encuentra "2 columns"). */
 export function filterBlocks(query: string) {
-  const q = norm(query.trim())
+  const q = norm(query).replace(/\s+/g, '')
   if (!q) return BLOCKS
-  return BLOCKS.filter((b) => norm(`${b.title} ${b.keywords}`).includes(q))
+  return BLOCKS.filter((b) => {
+    const hay = norm(`${b.title} ${b.keywords}`)
+    return hay.includes(q) || hay.replace(/\s+/g, '').includes(q)
+  })
 }

@@ -53,4 +53,29 @@ describe('Markdown de los bloques tipo Notion', () => {
     expect(out).toContain('```ts')
     expect(out).toContain('- [x] hecho')
   })
+
+  it('enlaces entre notas, color, columnas, incrustados y fórmulas', () => {
+    const md = [
+      'Ver [[Plan de diseño]] y <span data-color="red">urgente</span> con $x^2$.',
+      '',
+      '<!-- columns -->',
+      'Izquierda',
+      '<!-- column -->',
+      '- derecha',
+      '<!-- /columns -->',
+      '',
+      '@[embed](https://www.youtube.com/watch?v=dQw4w9WgXcQ)',
+      '',
+      '$$',
+      'E = mc^2',
+      '$$',
+    ].join('\n')
+    const { json, md: out } = roundTrip(md)
+    expect(types(json)).toEqual(['paragraph', 'columns', 'embed', 'blockMath'])
+    const para = JSON.stringify(json.content![0])
+    expect(para).toContain('"noteLink"')
+    expect(para).toContain('"textColor"')
+    expect(para).toContain('"inlineMath"')
+    expect(out.trim()).toBe(md)
+  })
 })

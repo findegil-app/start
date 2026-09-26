@@ -5,11 +5,13 @@ import ContainerDialog from '../components/ContainerDialog.vue'
 import MovePalette from '../components/MovePalette.vue'
 import Sidebar from '../components/Sidebar.vue'
 import Toasts from '../components/Toasts.vue'
+import { installNoteLinkHost } from '../stores/noteLinks'
 import { createNote } from '../stores/notes'
 
 const route = useRoute()
 const router = useRouter()
 const drawer = ref(false)
+installNoteLinkHost(router)
 
 async function capture() {
   const id = await createNote({ bucket: 'inbox' })

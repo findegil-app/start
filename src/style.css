@@ -609,6 +609,90 @@ button.chip, label.chip { cursor: pointer; }
 :root[data-theme='dark'] .prose .hljs-number { color: #f4a261; }
 :root[data-theme='dark'] .prose .hljs-title { color: #82aaff; }
 
+/* Color de texto (Notion): tonos distintos para claro y oscuro */
+:root {
+  --c-gray: #787774; --c-brown: #9f6b53; --c-orange: #d9730d; --c-yellow: #b58500; --c-green: #3a7d4f;
+  --c-blue: #2f6db3; --c-purple: #8a4bc6; --c-pink: #c14c8a; --c-red: #c4382f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --c-gray: #9b9b9b; --c-brown: #ba856f; --c-orange: #e6934a; --c-yellow: #dfb048; --c-green: #6fbf87;
+    --c-blue: #6aa3e8; --c-purple: #b58be0; --c-pink: #e07fb3; --c-red: #ef7a72;
+  }
+}
+:root[data-theme='dark'] {
+  --c-gray: #9b9b9b; --c-brown: #ba856f; --c-orange: #e6934a; --c-yellow: #dfb048; --c-green: #6fbf87;
+  --c-blue: #6aa3e8; --c-purple: #b58be0; --c-pink: #e07fb3; --c-red: #ef7a72;
+}
+.text-color[data-color='gray'] { color: var(--c-gray); }
+.text-color[data-color='brown'] { color: var(--c-brown); }
+.text-color[data-color='orange'] { color: var(--c-orange); }
+.text-color[data-color='yellow'] { color: var(--c-yellow); }
+.text-color[data-color='green'] { color: var(--c-green); }
+.text-color[data-color='blue'] { color: var(--c-blue); }
+.text-color[data-color='purple'] { color: var(--c-purple); }
+.text-color[data-color='pink'] { color: var(--c-pink); }
+.text-color[data-color='red'] { color: var(--c-red); }
+.color-wrap { position: relative; display: inline-flex; }
+.color-btn .text-color, .color-btn span { font-weight: 700; text-decoration: underline; }
+.color-palette {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px #0003;
+}
+.color-palette button { min-width: 0; padding: 0.2rem; }
+.swatch { display: grid; place-items: center; width: 1.6rem; height: 1.6rem; border: 1px solid var(--border); border-radius: 6px; font-weight: 700; }
+.swatch.default { color: var(--text); }
+
+/* Columnas */
+.prose .columns { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 1.25rem; margin: 0.5rem 0; }
+.prose .column { min-width: 0; padding: 0.25rem 0.5rem; border-radius: 8px; outline: 1px dashed transparent; }
+.prose .columns:hover .column, .prose .column:focus-within { outline-color: var(--border); }
+.prose .column > * + * { margin-top: 0.6em; }
+
+/* Incrustados */
+.prose .embed { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); margin: 0.5rem 0; }
+.prose .embed iframe { display: block; width: 100%; border: 0; background: var(--surface-2); }
+.prose .embed[data-kind='video'] iframe { aspect-ratio: 16 / 9; height: auto; }
+.prose .embed[data-kind='web'] iframe { height: 420px; }
+.prose .embed-bar { padding: 0.35rem 0.7rem; font-size: 0.8rem; border-top: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prose .embed-bar a { color: var(--muted); text-decoration: none; }
+.prose .embed-bar a:hover { color: var(--accent-text); }
+.prose .embed.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+
+/* Enlaces entre notas */
+.prose .note-link {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 0 0.3rem;
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+.prose .note-link::before { content: '↗ '; opacity: 0.7; font-size: 0.85em; }
+.prose .note-link:hover { text-decoration: underline; }
+.prose .note-link.missing { background: transparent; border: 1px dashed var(--accent); }
+.slash-group { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 0.4rem 0.5rem 0.2rem; }
+.backlinks { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.backlinks h4 { margin: 0 0 0.5rem; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.backlink { display: flex; gap: 0.6rem; align-items: baseline; padding: 0.35rem 0.5rem; border-radius: 8px; text-decoration: none; color: var(--text); }
+.backlink:hover { background: var(--surface-2); }
+.backlink small { color: var(--muted); }
+
+/* Fórmulas */
+.prose .tiptap-mathematics-render, .prose [data-type='inline-math'], .prose [data-type='block-math'] { cursor: pointer; }
+.prose [data-type='block-math'] { display: block; text-align: center; padding: 0.6rem; border-radius: 8px; overflow-x: auto; }
+.prose [data-type='block-math']:hover, .prose [data-type='inline-math']:hover { background: var(--surface-2); }
+
 /* Avisos (deshacer) */
 .toasts { position: fixed; left: 50%; bottom: calc(1.25rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 70; display: flex; flex-direction: column; gap: 0.5rem; align-items: center; }
 .toast {

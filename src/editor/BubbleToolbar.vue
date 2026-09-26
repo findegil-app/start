@@ -2,7 +2,9 @@
 import type { Editor as CoreEditor } from '@tiptap/core'
 import type { Editor } from '@tiptap/vue-3'
 import { BubbleMenu } from '@tiptap/vue-3/menus'
+import { ref } from 'vue'
 import { BLOCKS } from './blocks'
+import { TEXT_COLORS, type TextColorName } from './extensions/TextColor'
 
 const props = defineProps<{ editor: Editor }>()
 
@@ -16,6 +18,13 @@ function shouldShow({ editor, state }: { editor: CoreEditor; state: CoreEditor['
   const { empty } = state.selection
   if (empty || editor.isActive('codeBlock') || editor.isActive('image')) return false
   return state.doc.textBetween(state.selection.from, state.selection.to).trim().length > 0
+}
+
+const palette = ref(false)
+function setColor(color: TextColorName | null) {
+  if (color) c().setTextColor(color).run()
+  else c().unsetTextColor().unsetHighlight().run()
+  palette.value = false
 }
 
 function setLink() {
@@ -61,6 +70,17 @@ function turnInto(e: Event) {
         <mark>A</mark>
       </button>
       <button type="button" :class="{ active: editor.isActive('link') }" title="Link" @mousedown.prevent @click="setLink">🔗</button>
+      <span class="color-wrap">
+        <button type="button" class="color-btn" :class="{ active: editor.isActive('textColor') }" title="Text color" @mousedown.prevent @click="palette = !palette">
+          <span :data-color="editor.getAttributes('textColor').color ?? undefined" class="text-color">A</span> ▾
+        </button>
+        <div v-if="palette" class="color-palette">
+          <button type="button" title="Default" @mousedown.prevent @click="setColor(null)"><span class="swatch default">A</span></button>
+          <button v-for="col in TEXT_COLORS" :key="col" type="button" :title="col" @mousedown.prevent @click="setColor(col)">
+            <span class="swatch text-color" :data-color="col">A</span>
+          </button>
+        </div>
+      </span>
     </template>
   </BubbleMenu>
 </template>

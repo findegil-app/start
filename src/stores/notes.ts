@@ -38,7 +38,10 @@ function excerpt(content: string): string {
   return content
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/^\s*>\s*\[![A-Z]+\]\s*$/gim, '')
-    .replace(/<\/?(details|summary)>/g, ' ')
+    .replace(/@\[embed\]\(([^)]*)\)/g, '▶ $1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\$+/g, '')
+    .replace(/\\/g, '')
     .replace(/^\s*\|?\s*:?-{3,}.*$/gm, '')
     .replace(/^\s*[-*]\s+\[[ xX]\]\s*/gm, '')
     .replace(/```[\w-]*/g, '')
@@ -154,6 +157,8 @@ export async function createNote(location: Location = { bucket: 'inbox' }, field
 
 type Editable = Pick<Note, 'title' | 'content' | 'tags' | 'due' | 'remind' | 'done' | 'bucket' | 'containerId'>
 
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 /** Escritura local inmediata + marca pending. La UI no espera a la red. */
 export async function updateNote(id: string, patch: Partial<Editable>, syncDelay = EDIT_DEBOUNCE_MS) {
   await db.transaction('rw', db.notes, async () => {
@@ -161,7 +166,23 @@ export async function updateNote(id: string, patch: Partial<Editable>, syncDelay
     if (!note || note.syncStatus === 'deleted') return
     const changed = (Object.keys(patch) as (keyof Editable)[]).some((k) => JSON.stringify(note[k]) !== JSON.stringify(patch[k]))
     if (!changed) return
-    await db.notes.update(id, { ...patch, updatedAt: new Date().toISOString(), syncStatus: 'pending', rev: note.rev + 1 })
+    const now = new Date().toISOString()
+    await db.notes.update(id, { ...patch, updatedAt: now, syncStatus: 'pending', rev: note.rev + 1 })
+
+    // Renombrar una nota actualiza los [[enlaces]] que apuntan a ella en el resto de notas.
+    const oldTitle = note.title.trim()
+    const newTitle = patch.title?.trim()
+    if (oldTitle && newTitle && oldTitle !== newTitle) {
+      const re = new RegExp(`\\[\\[${escapeRe(oldTitle)}\\]\\]`, 'gi')
+      await db.notes
+        .filter((n) => n.id !== id && n.syncStatus !== 'deleted' && re.test(n.content))
+        .modify((n) => {
+          n.content = n.content.replace(re, `[[${newTitle}]]`)
+          n.updatedAt = now
+          n.syncStatus = 'pending'
+          n.rev += 1
+        })
+    }
   })
   requestSync(syncDelay)
 }
