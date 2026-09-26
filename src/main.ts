@@ -3,6 +3,7 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App.vue'
 import { router } from './router'
 import { loadAuth } from './stores/auth'
+import './stores/theme'
 import '@fontsource/marcellus/400.css'
 import './style.css'
 

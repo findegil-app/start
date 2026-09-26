@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Findegil: notas local-first respaldadas en GitHub" />
-    <meta name="theme-color" content="#14182b" />
+    <meta name="theme-color" content="#f6f1e7" />
+    <script>
+      // Aplica el tema elegido antes del primer pintado (evita el destello claro/oscuro).
+      try {
+        var t = localStorage.getItem('findegil-theme')
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t
+        var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#0f1220' : '#f6f1e7'
+      } catch (e) {}
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />

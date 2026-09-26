@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import SyncIndicator from '../components/SyncIndicator.vue'
 import { session, signOut as authSignOut } from '../stores/auth'
+import { cycleTheme, THEME_LABEL, themeMode } from '../stores/theme'
 import { createNote, useNoteList } from '../stores/notes'
 
 const route = useRoute()
@@ -40,7 +41,12 @@ async function signOut() {
           <img :src="logo" alt="" width="28" height="28" />
           <span>Findegil</span>
         </div>
-        <button type="button" class="icon-btn" title="Cerrar sesión" aria-label="Cerrar sesión" @click="signOut">⎋</button>
+        <div class="header-actions">
+          <button type="button" class="icon-btn" :title="THEME_LABEL[themeMode]" :aria-label="THEME_LABEL[themeMode]" @click="cycleTheme">
+            {{ themeMode === 'light' ? '☀' : themeMode === 'dark' ? '☾' : '◐' }}
+          </button>
+          <button type="button" class="icon-btn" title="Cerrar sesión" aria-label="Cerrar sesión" @click="signOut">⎋</button>
+        </div>
       </header>
       <div class="sidebar-tools">
         <input v-model="search" type="search" placeholder="Buscar… (#etiqueta)" aria-label="Buscar notas" />
