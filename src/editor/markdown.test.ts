@@ -54,6 +54,18 @@ describe('Markdown de los bloques tipo Notion', () => {
     expect(out).toContain('- [x] hecho')
   })
 
+  it('anchos de columna de tabla en un comentario', () => {
+    const md = ['<!-- widths: 120,0,240 -->', '| A | B | C |', '| --- | --- | --- |', '| 1 | 2 | 3 |', '', 'Fin'].join('\n')
+    const { json, md: out } = roundTrip(md)
+    expect(types(json)).toEqual(['table', 'paragraph'])
+    const cells = json.content![0].content![1].content!
+    expect(cells.map((c) => c.attrs?.colwidth ?? null)).toEqual([[120], null, [240]])
+    expect(out).toContain('<!-- widths: 120,0,240 -->\n| A')
+    expect(roundTrip(out).md).toBe(out)
+    // Sin anchos no se añade el comentario.
+    expect(roundTrip('| A | B |\n| --- | --- |\n| 1 | 2 |').md).not.toContain('widths')
+  })
+
   it('enlaces entre notas, color, columnas, incrustados y fórmulas', () => {
     const md = [
       'Ver [[Plan de diseño]] y <span data-color="red">urgente</span> con $x^2$.',

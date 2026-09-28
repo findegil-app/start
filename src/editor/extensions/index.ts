@@ -14,6 +14,7 @@ import { Callout } from './Callout'
 import { Column, Columns } from './Columns'
 import { Embed } from './Embed'
 import { NoteLink } from './NoteLink'
+import { ResizableTable } from './ResizableTable'
 import { TextColor } from './TextColor'
 import { Toggle, ToggleContent, ToggleSummary } from './Toggle'
 
@@ -32,7 +33,8 @@ export function contentExtensions(): AnyExtension[] {
     TaskItem.configure({ nested: true }),
     Highlight,
     CodeBlockLowlight.configure({ lowlight: createLowlight(common), defaultLanguage: null }),
-    TableKit.configure({ table: { resizable: false } }),
+    TableKit.configure({ table: false }),
+    ResizableTable,
     Toggle,
     ToggleSummary,
     ToggleContent,

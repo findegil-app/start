@@ -589,6 +589,8 @@ button.chip, label.chip { cursor: pointer; }
 .prose td > p, .prose th > p { margin: 0; }
 .prose .selectedCell::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); pointer-events: none; }
 .prose .tableWrapper { overflow-x: auto; }
+.prose .column-resize-handle { position: absolute; top: 0; bottom: -1px; right: -3px; width: 5px; background: var(--accent); opacity: 0.8; pointer-events: none; z-index: 2; }
+.prose.resize-cursor, .ProseMirror.resize-cursor { cursor: col-resize; }
 
 /* Resaltado de código (highlight.js / lowlight) */
 .prose pre { font-size: 0.88rem; }
