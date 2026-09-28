@@ -367,6 +367,12 @@ button.chip, label.chip { cursor: pointer; }
 .note-view { max-width: 860px; margin: 0 auto; padding: calc(0.8rem + env(safe-area-inset-top)) 2rem 4rem 3.5rem; }
 .note-topbar { display: flex; align-items: center; gap: 0.4rem; min-height: 2.25rem; }
 .note-topbar .back { display: none; }
+.note-topbar .focus-btn { font-size: 1.05rem; margin-left: -0.4rem; }
+@media (min-width: 761px) {
+  .section.focus { grid-template-columns: 1fr; }
+  .section.focus .list-pane { display: none; }
+  .section.focus .note-view { max-width: 1120px; }
+}
 .crumb { font-size: 0.8rem; color: var(--muted); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumb:hover { color: var(--accent-text); }
 .due-controls { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.35rem 0 0.2rem; }
@@ -853,6 +859,7 @@ button.chip, label.chip { cursor: pointer; }
   .row-actions { opacity: 1; }
   .row-actions .icon-btn { display: none; }
   .note-topbar .back { display: inline-grid; }
+  .note-topbar .focus-btn { display: none; }
   .note-view { padding-left: 0.9rem; padding-right: 0.9rem; }
   .title-input { font-size: 1.5rem; }
   .toolbar { overflow-x: auto; flex-wrap: nowrap; }

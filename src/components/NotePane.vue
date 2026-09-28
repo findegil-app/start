@@ -5,6 +5,7 @@ import NoteEditor from '../editor/NoteEditor.vue'
 import { KIND_PLURAL } from '../lib/para'
 import { openMove, useContainers } from '../stores/containers'
 import { deleteWithUndo } from '../composables/useDeleteNote'
+import { focusMode, toggleFocus } from '../stores/layout'
 import { backlinks } from '../stores/noteLinks'
 import { updateNote, useLiveQuery, useNote } from '../stores/notes'
 import DueControls from './DueControls.vue'
@@ -93,6 +94,16 @@ onBeforeUnmount(flushTitle)
   <article v-if="note" class="note-view">
     <div class="note-topbar">
       <button type="button" class="icon-btn back" aria-label="Back to list" @click="emit('close')">‹</button>
+      <button
+        type="button"
+        class="icon-btn focus-btn"
+        :title="focusMode ? 'Show note list (Ctrl+\\)' : 'Hide note list (Ctrl+\\)'"
+        :aria-label="focusMode ? 'Show note list' : 'Hide note list'"
+        :aria-pressed="focusMode"
+        @click="toggleFocus"
+      >
+        {{ focusMode ? '⇥' : '⇤' }}
+      </button>
       <RouterLink v-if="crumb" :to="crumb.to" class="crumb">{{ crumb.label }}</RouterLink>
       <span class="spacer" />
       <button type="button" class="ghost small" title="Move to… (M)" @click="openMove(note.id)">↗ Move</button>

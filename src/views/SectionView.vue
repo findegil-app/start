@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NoteListItem from '../components/NoteListItem.vue'
 import NotePane from '../components/NotePane.vue'
@@ -16,6 +16,7 @@ import {
   useContainer,
 } from '../stores/containers'
 import { deleteWithUndo } from '../composables/useDeleteNote'
+import { focusMode, toggleFocus } from '../stores/layout'
 import { createNote, useLiveQuery, useNotesIn, type Location } from '../stores/notes'
 
 const emit = defineEmits<{ menu: [] }>()
@@ -121,6 +122,16 @@ async function removeNote(id: string) {
   if (openId.value === id) open(next && next.id !== id ? next.id : null)
 }
 
+// Ctrl/⌘ + \ muestra u oculta el listado, también mientras se escribe.
+function onGlobalKey(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === '\\' && openId.value) {
+    e.preventDefault()
+    toggleFocus()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
+
 function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement
   if (e.ctrlKey || e.metaKey || e.altKey || t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return
@@ -143,7 +154,7 @@ function onKey(e: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="section" :class="{ 'has-note': openId }" tabindex="-1" @keydown="onKey">
+  <div class="section" :class="{ 'has-note': openId, focus: focusMode && openId }" tabindex="-1" @keydown="onKey">
     <section class="list-pane">
       <header class="list-head">
         <div class="list-title">
