@@ -1,0 +1,1 @@
+import{C as e,F as t,G as n,L as r,R as i,ot as a}from"./index-C5P9pm_Y.js";import{t as o}from"./Sidebar-DasvhTJc.js";var s={class:`library-home`},c=i({__name:`LibraryHome`,setup(i){let c=e();return(e,i)=>(n(),t(`div`,s,[r(o,{class:`as-page`,onCapture:i[0]||=e=>a(c).push({name:`capture`})})]))}});export{c as default};
