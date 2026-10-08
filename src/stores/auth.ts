@@ -81,13 +81,20 @@ export async function unlockRepo(): Promise<void> {
   if (!token) throw new UnlockError('mismatch', 'The access bundled in the app does not match this Google account.')
 
   // Octokit se carga bajo demanda para no engordar el arranque de la app.
-  const { fetchRepoInfo, UnauthorizedError } = await import('../github/client')
+  const { fetchRepoInfo, isStatus, UnauthorizedError } = await import('../github/client')
   let info
   try {
     info = await fetchRepoInfo(token, cfg.owner, cfg.repo)
   } catch (err) {
     if (err instanceof UnauthorizedError) {
       throw new UnlockError('expired', 'The GitHub access token has expired or was revoked.')
+    }
+    // 404/403: el token es válido pero no ve el repo (p. ej. se recreó y el token apunta al antiguo).
+    if (isStatus(err, 403, 404)) {
+      throw new UnlockError(
+        'no-access',
+        `The access token can't see ${cfg.owner}/${cfg.repo}. If the repository was recreated, add it to the token's repository access on GitHub.`,
+      )
     }
     throw new UnlockError('no-access', 'Could not reach the notes repository. Are you online?')
   }
