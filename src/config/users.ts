@@ -13,7 +13,7 @@ export interface UserConfig {
 
 /** Cuentas de Google autorizadas y su repositorio de notas. Solo estas pueden entrar. */
 export const USERS: Record<string, UserConfig> = {
-  'pablo.llorente@nfq.es': { owner: 'pablolloce', repo: 'red-notes' },
+  'pablo.llorente@nfq.es': { owner: 'pablo-cere', repo: 'red-notes' },
 }
 
 export const normEmail = (email: string | null | undefined) => (email ?? '').trim().toLowerCase()

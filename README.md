@@ -3,7 +3,7 @@
 PWA de notas **local-first** que usa un repositorio privado de GitHub como base de datos ("Git-as-a-Database").
 
 - **Frontend** (este repo): Vue 3 + TypeScript + Vite, desplegado en GitHub Pages.
-- **Almacenamiento**: repo privado [`pablolloce/red-notes`](https://github.com/pablolloce/red-notes), solo Markdown + imágenes, vía la API REST de GitHub.
+- **Almacenamiento**: repo privado [`pablo-cere/red-notes`](https://github.com/pablo-cere/red-notes), solo Markdown + imágenes, vía la API REST de GitHub.
 
 ## Arquitectura
 
@@ -87,7 +87,7 @@ assets/<uuid>.webp                     # imágenes (referenciadas como /assets/�
 
 | Secreto | Valor |
 | --- | --- |
-| `NOTES_TOKEN` | Fine-grained PAT con acceso solo a `pablolloce/red-notes`, permiso *Contents: Read and write* |
+| `NOTES_TOKEN` | Fine-grained PAT con acceso solo a `pablo-cere/red-notes`, permiso *Contents: Read and write* |
 | `NOTES_GOOGLE_SUB` | Id de tu cuenta de Google. Si falta o no coincide, la app lo muestra tras iniciar sesión con un botón *Copiar* |
 
 Tras crear/cambiar un secreto, relanza el workflow *Deploy to GitHub Pages*. Para rotar el token: nuevo PAT → actualizar `NOTES_TOKEN` → relanzar el deploy (si el antiguo se revoca, la app avisa de que ha caducado).
